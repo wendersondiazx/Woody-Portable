@@ -5,7 +5,7 @@
 
 ![Status](https://img.shields.io/badge/Status-In%20Development-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-PSP-blue?style=for-the-badge)
-![Build](https://img.shields.io/badge/Build-Prototype-green?style=for-the-badge)
+![Build](https://img.shields.io/badge/Build-Beta-green?style=for-the-badge)
 
 ---
 > [!IMPORTANT]
