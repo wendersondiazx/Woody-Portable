@@ -1,0 +1,11 @@
+Third-party notices
+
+The adapted WoodyRE engine in `woody/runtime/vendor/src` is GPL-3.0-or-later. Its original license is preserved in `woody/runtime/vendor/LICENSE`; the repository license is `LICENSE`.
+
+The PSP runtime uses PSPSDK libraries and libc. The local fixed-function frontend in `woody/runtime/native_gu.c` calls `sceGu` directly. PSPGL, EGL and SDL are not linked.
+
+The Windows converter uses Qt Widgets 6.10.0, Copyright The Qt Company Ltd. and contributors, under its open-source LGPL/GPL terms. Matching Qt sources: https://download.qt.io/archive/qt/6.10/6.10.0/ . Qt remains dynamically linked and its DLLs are shipped alongside the EXE. The distribution includes Microsoft Visual C++ redistributable DLLs and the Windows SDK DirectX shader compiler where available.
+
+The Eko VAG stereo layout was verified against the original game headers and the public vgmstream format parser: https://github.com/vgmstream/vgmstream/blob/master/src/meta/vag.c . No vgmstream library is linked into the runtime.
+
+Disc images, extracted game assets, textures, sounds, music, movies and cover art are user-supplied and are not included in the source repository.

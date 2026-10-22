@@ -1,0 +1,93 @@
+# Local SDKs, extracted discs, emulators and release packages.
+/build/
+/reference/
+/psp-developer-main/
+/.vscode/
+/.toolchains/
+/dist/
+/room picapau/
+/data/
+/extract/
+
+# Original game resources stay on the developer's machine.
+*.iso
+*.ISO
+*.cso
+*.chd
+*.img
+*.bin
+*.vag
+*.VAG
+*.rck
+*.tex
+*.gel
+*.ins
+*.lit
+*.col
+*.vis
+*.pss
+*.hnm
+*.bf
+
+# PSP and desktop build outputs.
+*.pbp
+*.PBP
+*.o
+*.obj
+*.d
+*.a
+*.so
+*.dll
+*.exe
+*.elf
+*.prx
+*.pdb
+*.map
+*.sym
+PARAM.SFO
+
+# Saves, diagnostics and local launch settings.
+*.sav
+*.ppst
+*.ppst.undo
+woodyre.cfg
+Woody.cfg
+woody-test-*
+woody-*.flag
+capture*.ppm
+*.log
+/log.txt
+
+# Python and editor caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Machine-specific credentials and tool state.
+.env
+.env.*
+!.env.example
+!.env.sample
+.aws/
+.codex/
+.agents/
+woody/runtime/presentation/
+
+# Source-only public repository.
+*.md
+*.py
+/tools/
+/tests/
+/docs/

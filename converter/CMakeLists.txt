@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.24)
+project(WoodyConverter VERSION 1.1.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets)
+qt_add_executable(WoodyConverter WIN32 main.cpp convert.cpp convert.hpp)
+target_link_libraries(WoodyConverter PRIVATE Qt6::Widgets)
+target_compile_definitions(WoodyConverter PRIVATE WOODY_STUDIO_VERSION="${PROJECT_VERSION} beta")
+qt_add_resources(WoodyConverter runtime PREFIX "/runtime" BASE "${CMAKE_CURRENT_SOURCE_DIR}/../woody/runtime"
+    FILES "../woody/runtime/EBOOT.PBP")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../dist/PSP/GAME/WOODYPSP/data/presentation/cover.rgba")
+qt_add_resources(WoodyConverter presentation PREFIX "/presentation" BASE "${CMAKE_CURRENT_SOURCE_DIR}/../dist/PSP/GAME/WOODYPSP/data/presentation"
+    FILES "../dist/PSP/GAME/WOODYPSP/data/presentation/cover.rgba")
+endif()
+qt_add_resources(WoodyConverter legal PREFIX "/legal" BASE "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    FILES "../LICENSE" "../NOTICE")
+if(MSVC)
+    target_compile_options(WoodyConverter PRIVATE /W4 /utf-8 /permissive-)
+endif()
+enable_testing()
+add_test(NAME converter-self-test COMMAND WoodyConverter --self-test)
