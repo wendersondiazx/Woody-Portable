@@ -96,12 +96,3 @@ There is still considerable engineering work ahead, particularly in physics tuni
 
 Nevertheless, the initial results demonstrate the technical potential of the approach.
 
----
-
-# COMING SOON
-
-**A new 3D platforming experiment on the original PlayStation Portable.**
-
-*Built for real hardware. Driven by experimentation. Inspired by Woody Woodpecker.*
-
-**Development is ongoing. Stay tuned for future updates, gameplay demonstrations, and technical milestones.**
