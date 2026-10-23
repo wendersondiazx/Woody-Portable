@@ -163,7 +163,7 @@ void enemies_add(EnemySet *s, Instance *inst, int type, struct Player *pl) {
     e->path_dir = 1;
     e->path_to = 1;
     {
-        Vec3 f = mat4_apply(&inst->world, (Vec3){0, -1, 0});
+        Vec3 f = mat4_apply(&inst->world, Vec3{0, -1, 0});
         e->ang = e->want_ang = e->start_ang =
             atan2f(f.z - inst->position.z, f.x - inst->position.x);
     } /* PostLoad 0x419ec1: angle0 = pos -> pos - row(+0x34) */
@@ -198,7 +198,7 @@ void enemies_add(EnemySet *s, Instance *inst, int type, struct Player *pl) {
         game_msgmask(inst, 0x10, 0);
         if (wenv("WOODY_BOSSHP"))
             e->hp = (float)atof(wenv("WOODY_BOSSHP")); /* testing */
-        Vec3 f = mat4_apply(&inst->world, (Vec3){0, -1, 0});
+        Vec3 f = mat4_apply(&inst->world, Vec3{0, -1, 0});
         e->ang = atan2f(f.z - inst->position.z, f.x - inst->position.x);
     } /* Reset 0x411020: Stilstaan, timers 0, idle 9, state 0 (it clears msgmask 0x10); he keeps his
          .ins facing */
@@ -224,7 +224,8 @@ static int bomber_peck(Enemy *e);
 static void bomber_blast(Enemy *e, Vec3 c, float r);
 int enemy_take_damage(Enemy *e, float dmg, Vec3 dir) {
     if (e->type == 14)
-        return boss_take_damage(e, NULL, 0); /* vtbl[40] 0x41ae20: vtbl[39](0, hp, &dir, NULL, 0) */
+        return boss_take_damage(e, nullptr,
+                                0); /* vtbl[40] 0x41ae20: vtbl[39](0, hp, &dir, nullptr, 0) */
     if (e->type == 15)
         return 0; /* 0x40e720: xor al, al */
     if (e->type == 16)
@@ -289,7 +290,7 @@ void enemies_blast(EnemySet *s, Vec3 c, float r) {
         if (dx * dx + dy * dy + dz * dz >= r * r)
             continue;
         float l = sqrtf(dx * dx + dz * dz);
-        Vec3 d = l > 1e-3f ? (Vec3){dx / l, 0, dz / l} : (Vec3){0, 0, 1};
+        Vec3 d = l > 1e-3f ? Vec3{dx / l, 0, dz / l} : Vec3{0, 0, 1};
         e->hit_t = e->knock_t = 0;
         enemy_take_damage(e, e->type == 14 ? 1.0f : e->hp, d);
     }
@@ -668,7 +669,7 @@ static void wander_restart(Enemy *e, int a) /* vtbl[6] 0x41c090 (a = -1) / 0x41c
     e->w_dur = 0;
     e->w_home_t = 0;
     e->w_homing = 0;
-    e->w_avoid = NULL;
+    e->w_avoid = nullptr;
     e->w_avoid_t = 0;
     wander_choose(e, a);
 }
@@ -728,7 +729,7 @@ static float wander_tick(Enemy *e, float dt) {
 /* avoidance 0x41c470 after the move: Touch(0, 0) = the first other actor within the sum of the
  * radii (3D) turns it away (action 7) */
 static void wander_avoid(Enemy *e, float dt) {
-    const void *o = NULL;
+    const void *o = nullptr;
     Vec3 op = {0, 0, 0};
     if (g_epl && !g_epl->dead_kind) {
         Vec3 p = perso_pos(g_epl);
@@ -782,9 +783,9 @@ static void enemy_blocked(Enemy *e) {
 static Vec3 plat_delta(const Enemy *e) {
     const Instance *in = e->plat_inst;
     if (!in || !in->node_world || e->plat_node >= in->model->nnodes)
-        return (Vec3){0, 0, 0};
+        return Vec3{0, 0, 0};
     Vec3 w = mat4_apply(&in->node_world[e->plat_node], e->plat_local);
-    return (Vec3){w.x - e->plat_world.x, w.y - e->plat_world.y, w.z - e->plat_world.z};
+    return Vec3{w.x - e->plat_world.x, w.y - e->plat_world.y, w.z - e->plat_world.z};
 }
 /* the sweep 0x437580(res, from, to, up, 30.0) (docs/BOSS14.md 5.1): a SPHERE of radius P+4
  * ([0x4b3118], 0x41b489) whose centre sits r + up + 1 above the feet moves in floor(|to - from| /
@@ -816,7 +817,7 @@ static Vec3 enemy_sweep(Enemy *e, struct Player *pl, Vec3 from, Vec3 to, float u
         float g = player_ground_query_n(pl, e->inst, c, &found, &gn);
         if (c.y - h < g)
             c.y = g + h; /* 0x4376bf */
-        res = (Vec3){c.x, c.y - h, c.z};
+        res = Vec3{c.x, c.y - h, c.z};
         *gy = g;
         *ny = gn.y;
     }
@@ -874,8 +875,8 @@ int enemy_common_move(Enemy *e, struct Player *pl, Vec3 delta, float *knock_t, V
         }
     }
     if (e->type >= 13)
-        res.y = from.y;  /* 0x41b4fe: subtypes 9 (ghost), 11..13 (bosses) */
-    e->plat_inst = NULL; /* 0x41b514 */
+        res.y = from.y;     /* 0x41b4fe: subtypes 9 (ghost), 11..13 (bosses) */
+    e->plat_inst = nullptr; /* 0x41b514 */
     float drop = res.y - gy;
     int ok = ny >= 0.8f && !(drop >= e->P.drop); /* 0x41b519..0x41b54a */
     if (wenv("WOODY_SWEEPLOG") && (!ok || fabsf(res.x - to.x) + fabsf(res.z - to.z) > 0.5f))
@@ -924,8 +925,8 @@ static void ground_snap(Enemy *e, struct Player *pl) {
         return;
     e->need_snap = 0;
     int found;
-    float gy = player_ground_query(
-        pl, e->inst, (Vec3){e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, &found);
+    float gy = player_ground_query(pl, e->inst,
+                                   Vec3{e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, &found);
     if (found) {
         e->pos.y = gy;
         e->vfall = 0;
@@ -942,13 +943,13 @@ static void ground_snap(Enemy *e, struct Player *pl) {
  * a shipped enemy. */
 int enemy_probe(Enemy *e, struct Player *pl, Vec3 pt, float tol, float *gy, int *found) {
     uint32_t col = 0xffffffffu, node = 0;
-    const Instance *hi = NULL;
+    const Instance *hi = nullptr;
     *gy = player_ground_query_hit(pl, e->inst, pt, found, &col, &hi, &node);
     int on = *found && pt.y - (*gy + tol) < 1.0f;
     /* on an instance press node (hit type 2) 0x436d80 attaches the probe to it at pt (0x431700: pt
      * in node space), anything else clears it (0x436ea2 / 0x436ed0); the next common move adds that
      * point's displacement (platform carry) */
-    e->plat_inst = NULL;
+    e->plat_inst = nullptr;
     if (on && hi && player_node_local(hi, node, pt, &e->plat_local)) {
         e->plat_inst = hi;
         e->plat_node = node;
@@ -965,7 +966,7 @@ void enemy_reset_probe(
                    ground follow presses */
     float h2 = e->P.height * 0.5f, gy;
     int found;
-    enemy_probe(e, g_epl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy, &found);
+    enemy_probe(e, g_epl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy, &found);
 }
 /* Enemy::HandleMsg 0x41abfd: message 6 with 0 on an enemy that is in the world (cell >= 0) ->
  * UnPress of the probe's collision (0x41ac11) and out of the world (0x407850, left to inst_msg) */
@@ -1074,7 +1075,7 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
     case 8: { /* wander 0x418dc6 (ghost 5): the behaviour's actions (wander_tick) */
         float l = wander_tick(e, dt);
         anim = -2;
-        step = (Vec3){cosf(e->ang) * l, 0, sinf(e->ang) * l};
+        step = Vec3{cosf(e->ang) * l, 0, sinf(e->ang) * l};
         if (e->cool < 0 && see)
             e->st = 2;
         if (in->traj.npoints > 1) {
@@ -1110,7 +1111,7 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         e->want_ang = chase_target(
             e, to_player); /* Steer 0x41bd00: H.Tick toward the last target, then the new one */
         if ((e->turn_t -= dt) <= 0) {
-            step = (Vec3){cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
+            step = Vec3{cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
             anim = EA_RUN;
         } else
             anim = EA_TURN;
@@ -1145,9 +1146,9 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
             float sl = sqrtf(sd.x * sd.x + sd.y * sd.y + sd.z * sd.z);
             float rt;
             if (sl > 1e-3f &&
-                !player_ray_full(pl, (Vec3){e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, m0,
+                !player_ray_full(pl, Vec3{e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, m0,
                                  &rt)) /* 0x497ed0: world and press nodes */
-                game_enemy_shot(e, m0, (Vec3){sd.x / sl, sd.y / sl, sd.z / sl}, 1000.0f,
+                game_enemy_shot(e, m0, Vec3{sd.x / sl, sd.y / sl, sd.z / sl}, 1000.0f,
                                 e->P.shot_dmg, 0, e->P.shot_visual,
                                 e->P.shot_fx); /* straight fireball at the feet (0x414d10) */
             e->reload += e->P.reload;
@@ -1177,9 +1178,9 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         e->atk_t -= dt;
         steer(e, e->want_ang, e->P.turn_fast, dt);
         e->want_ang = chase_target(e, to_player);
-        step = (Vec3){cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
+        step = Vec3{cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
         if (sqrtf(dx * dx + dy * dy + dz * dz) < e->P.radius + 69.0f) {
-            Vec3 d = dxz > 1e-3f ? (Vec3){dx / dxz, 0, dz / dxz} : (Vec3){1, 0, 0};
+            Vec3 d = dxz > 1e-3f ? Vec3{dx / dxz, 0, dz / dxz} : Vec3{1, 0, 0};
             if (player_hit(pl, e->P.bite, d)) {
                 player_kill(pl, 3);
                 e->t = ea_len(e, EA_WIN);
@@ -1257,7 +1258,7 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         if (e->st != 9 && e->st != 12) {
             int found;
             float gy, h2 = e->P.height * 0.5f;
-            int on = enemy_probe(e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
+            int on = enemy_probe(e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
                                  &found); /* 0x414f8d */
             float want = see ? tp.y - e->pos.y : e->home.y - e->pos.y,
                   stp = see ? e->P.run * dt : e->P.walk * dt;
@@ -1272,8 +1273,8 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
                 }
             } else if (want > 0.01f) {
                 float up = want > stp ? stp : want, t;
-                if (!player_ray_full(pl, (Vec3){e->pos.x, e->pos.y + e->P.height, e->pos.z},
-                                     (Vec3){e->pos.x, e->pos.y + e->P.height + up, e->pos.z}, &t))
+                if (!player_ray_full(pl, Vec3{e->pos.x, e->pos.y + e->P.height, e->pos.z},
+                                     Vec3{e->pos.x, e->pos.y + e->P.height + up, e->pos.z}, &t))
                     e->pos.y += up;
             } /* 0x4359b0: world and press nodes */
             game_msgmask(in, 0x200, on); /* 0x41514d / 0x415169: +0x174 bit 0 (hit or clamped);
@@ -1284,7 +1285,7 @@ static void enemy_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
     {
         int found;
         float gy, h2 = e->P.height * 0.5f;
-        int on = enemy_probe(e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
+        int on = enemy_probe(e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
                              &found); /* 0x41a561 */
         e->vfall += 200.0f * dt - 0.2f * e->vfall;
         e->pos.y -= e->vfall;
@@ -1573,7 +1574,7 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         break;
     case S_WANDER: { /* 0x4170a3 */
         float l = wander_tick(e, dt);
-        step = (Vec3){cosf(e->ang) * l, 0, sinf(e->ang) * l};
+        step = Vec3{cosf(e->ang) * l, 0, sinf(e->ang) * l};
         if (e->cool < 0 && see) {
             e->st = S_WAIT;
             shooter_react(e);
@@ -1632,16 +1633,16 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         Vec3 m0;
         float rt;
         if (!shooter_vector(in, 1, &m0)) {
-            m0 = (Vec3){e->pos.x + cosf(e->ang) * e->P.radius, e->pos.y + e->P.height * 0.7f,
-                        e->pos.z + sinf(e->ang) * e->P.radius};
+            m0 = Vec3{e->pos.x + cosf(e->ang) * e->P.radius, e->pos.y + e->P.height * 0.7f,
+                      e->pos.z + sinf(e->ang) * e->P.radius};
         }
         if (e->type == 9 && (e->t -= dt) > 0)
             break;
         /* 0x497ed0: from the own centre to the own muzzle; blocked = the shot is skipped but the
          * reload still counts */
-        if (!player_ray_full(pl, (Vec3){e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, m0,
+        if (!player_ray_full(pl, Vec3{e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z}, m0,
                              &rt)) /* world and press nodes */
-            game_enemy_shot(e, m0, (Vec3){cosf(e->ang), 0, sinf(e->ang)}, 1000.0f, e->P.shot_dmg,
+            game_enemy_shot(e, m0, Vec3{cosf(e->ang), 0, sinf(e->ang)}, 1000.0f, e->P.shot_dmg,
                             e->P.steer, e->P.shot_visual, e->P.shot_fx);
         e->reload += e->P.reload;
         e->st = S_WAIT;
@@ -1675,9 +1676,9 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         steer(e, e->want_ang, e->P.turn_fast, dt);
         e->want_ang = chase_target(e, to_player);
         if ((e->turn_t -= dt) <= 0)
-            step = (Vec3){cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
+            step = Vec3{cosf(e->ang) * e->speed * dt, 0, sinf(e->ang) * e->speed * dt};
         if (sqrtf(dx * dx + dy * dy + dz * dz) < e->P.radius + 69.0f) {
-            Vec3 d = dxz > 1e-3f ? (Vec3){dx / dxz, 0, dz / dxz} : (Vec3){1, 0, 0};
+            Vec3 d = dxz > 1e-3f ? Vec3{dx / dxz, 0, dz / dxz} : Vec3{1, 0, 0};
             if (player_hit(pl, e->P.bite, d)) {
                 player_kill(pl, 3);
                 e->t = sac_len(e, 11);
@@ -1739,19 +1740,19 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
     }
     case S_DODGE0: { /* 0x417a63: 300 away along the dive, else sideways, else back */
         float l = sqrtf(e->warn.x * e->warn.x + e->warn.z * e->warn.z);
-        Vec3 d = l > 1e-3f ? (Vec3){e->warn.x / l * e->P.dodge, 0, e->warn.z / l * e->P.dodge}
-                           : (Vec3){e->P.dodge, 0, 0};
+        Vec3 d = l > 1e-3f ? Vec3{e->warn.x / l * e->P.dodge, 0, e->warn.z / l * e->P.dodge}
+                           : Vec3{e->P.dodge, 0, 0};
         Vec3 cand[4] = {{d.x, 0, d.z}, {-d.z, 0, d.x}, {d.z, 0, -d.x}, {-d.x, 0, -d.z}},
              pick = cand[0];
         for (int k = 0; k < 4; k++) {
             Vec3 c = {e->pos.x + cand[k].x, e->pos.y, e->pos.z + cand[k].z};
             int found;
             float rt;
-            if (player_ray_full(pl, (Vec3){e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z},
-                                (Vec3){c.x, c.y + e->P.height * 0.5f, c.z}, &rt))
+            if (player_ray_full(pl, Vec3{e->pos.x, e->pos.y + e->P.height * 0.5f, e->pos.z},
+                                Vec3{c.x, c.y + e->P.height * 0.5f, c.z}, &rt))
                 continue; /* 0x4359b0: world and press nodes */
-            float gy = player_ground_query(pl, in, (Vec3){c.x, c.y + e->P.height * 0.5f, c.z},
-                                           &found),
+            float gy =
+                      player_ground_query(pl, in, Vec3{c.x, c.y + e->P.height * 0.5f, c.z}, &found),
                   drop = e->pos.y -
                          gy; /* GetHeight 0x435650(c, -1, 1): nothing found = c.y, so -drop = h/2 */
             if (drop <= e->P.drop && -drop <= e->P.rise) {
@@ -1759,7 +1760,7 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
                 break;
             }
         }
-        e->dodge_dir = (Vec3){pick.x / e->P.dodge, 0, pick.z / e->P.dodge};
+        e->dodge_dir = Vec3{pick.x / e->P.dodge, 0, pick.z / e->P.dodge};
         e->ang = atan2f(-pick.z, -pick.x); /* faces against the move */
         e->t = e->P.dodge / (3.0f * e->P.run);
         e->behav = 2;
@@ -1770,7 +1771,7 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         if (e->t > 0) {
             e->t -= dt;
             float v = 3.0f * e->P.run * dt;
-            step = (Vec3){e->dodge_dir.x * v, 0, e->dodge_dir.z * v};
+            step = Vec3{e->dodge_dir.x * v, 0, e->dodge_dir.z * v};
         } else {
             e->reload = e->P.reload;
             e->cool = e->P.cool;
@@ -1787,7 +1788,7 @@ static void shooter_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
     {
         int found;
         float gy, h2 = e->P.height * 0.5f;
-        int on = enemy_probe(e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
+        int on = enemy_probe(e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
                              &found); /* ground following 0x41a4e0 */
         e->vfall += 200.0f * dt - 0.2f * e->vfall;
         e->pos.y -= e->vfall;
@@ -1843,7 +1844,7 @@ static int bomber_peck(Enemy *e) /* vtbl[39] 0x411ab0: never damage, always "not
     if (e->removed || e->st == 13 || e->hit_t > 0)
         return 0;
     e->hit_t = ba_len(e, BA_STUN);
-    audio_fx(54, NULL, NULL);
+    audio_fx(54, nullptr, nullptr);
     e->st = 11;
     return 0;
 }
@@ -1852,7 +1853,7 @@ static void bomber_blast(Enemy *e, Vec3 c, float r) /* vtbl[40] 0x4119b0: 1 hp p
     float dx = e->pos.x - c.x, dy = e->pos.y - c.y, dz = e->pos.z - c.z;
     if (e->st == 13 || e->hit_t > 0 || dx * dx + dy * dy + dz * dz >= r * r)
         return;
-    audio_fx(52, NULL, NULL);
+    audio_fx(52, nullptr, nullptr);
     e->st = 14;
     e->hit_t = ba_len(e, BA_STUN);
     /* Enemy_TakeDamage 0x41adc0(0, 1.0, &(0,0,0), pos, 0): Behav_Knock 0x41b6b0 refuses while
@@ -1862,7 +1863,7 @@ static void bomber_blast(Enemy *e, Vec3 c, float r) /* vtbl[40] 0x4119b0: 1 hp p
      */
     if (e->knock_t > 0)
         return;
-    e->knock_dir = (Vec3){0, 0, 0};
+    e->knock_dir = Vec3{0, 0, 0};
     e->knock_t = ba_len(e, BA_HIT);
     e->hp -= 1.0f;
     game_hit_star(c);
@@ -1978,9 +1979,9 @@ int sweep_sphere_cyl(Vec3 a, Vec3 b, float r, Vec3 c, float R, float H) {
         g_hit_frac = t0;
         return 2;
     } /* 0x433aff, 0x433b11: through the straight part */
-    if (sweep_sphere_sphere(a, b, r, (Vec3){c.x, R + c.y, c.z}, R))
-        return 2;                                                          /* 0x433b6d: lower cap */
-    return sweep_sphere_sphere(a, b, r, (Vec3){c.x, H + c.y - R, c.z}, R); /* 0x433ba2: upper cap */
+    if (sweep_sphere_sphere(a, b, r, Vec3{c.x, R + c.y, c.z}, R))
+        return 2;                                                        /* 0x433b6d: lower cap */
+    return sweep_sphere_sphere(a, b, r, Vec3{c.x, H + c.y - R, c.z}, R); /* 0x433ba2: upper cap */
 }
 /* 0x433de0(a, b, c, R, h): the segment a..b against the upright cylinder around the CENTRE c,
  * radius R, y range [c.y - h + 0.1, c.y + h - 0.1] (0x4a9008 = 0.1): the xz quadratic clipped to
@@ -2038,7 +2039,7 @@ Enemy *enemies_bomb_contact(EnemySet *s, const Enemy *owner, Vec3 a, Vec3 b, flo
         if (sweep_sphere_cyl(a, b, r, e->pos, e->P.radius, e->P.height))
             return e;
     }
-    return NULL;
+    return nullptr;
 }
 static void bomber_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
     Instance *in = e->inst;
@@ -2110,11 +2111,11 @@ static void bomber_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
             fuse = 1.3f;
             e->nlong = 4;
         } /* P+0x94 / P+0x90 / P+0x98 */
-        if (!game_enemy_bomb(e, m0, (Vec3){d.x / l, d.y / l, d.z / l}, 800.0f, fuse))
+        if (!game_enemy_bomb(e, m0, Vec3{d.x / l, d.y / l, d.z / l}, 800.0f, fuse))
             break; /* no free bomb: the fuse count is spent anyway */
         e->reload = ba_len(e, BA_THROW);
         e->st = 3;
-        audio_fx(50, NULL, NULL);
+        audio_fx(50, nullptr, nullptr);
         if (wenv("WOODY_BOSSLOG"))
             printf("  THROWER %u throws a bomb (fuse %.1f)", in->index, fuse), puts("");
         break;
@@ -2134,7 +2135,7 @@ static void bomber_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         e->windup = ba_len(e, BA_WIND);
         e->melee_t = ba_len(e, BA_WIND) + ba_len(e, BA_AFTER);
         e->st = 5;
-        audio_fx(51, NULL, NULL);
+        audio_fx(51, nullptr, nullptr);
         in->anim = -1;
         anim = g_ba[BA_WIND].anim;
         break;
@@ -2157,7 +2158,7 @@ static void bomber_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
         e->big_touch = 0;
         {
             float l = sqrtf(dx * dx + dz * dz);
-            Vec3 d = l > 1e-3f ? (Vec3){dx / l, 0, dz / l} : (Vec3){1, 0, 0};
+            Vec3 d = l > 1e-3f ? Vec3{dx / l, 0, dz / l} : Vec3{1, 0, 0};
             if (player_hit(pl, e->P.bite, d)) {
                 player_kill(pl, 3);
                 e->st = 9;
@@ -2232,21 +2233,20 @@ static void bomber_update(Enemy *e, struct Player *pl, Vec3 cam, float dt) {
             game_enemy_stars(e);
             e->attackable = 0;
             e->st = 13;
-            audio_fx(53, NULL, NULL);
+            audio_fx(53, nullptr, nullptr);
             in->anim = -1;
         } else if (e->hit_t <= 0)
             e->st = 0;
         break;
     }
     if (e->st == 4 || e->st == 7 || e->st == 9 || e->st == 11)
-        anim = -1; /* the set-up states have no animation of their own */
-    enemy_move(e, pl, (Vec3){0, 0, 0},
-               dt); /* Enemy::Update: Stand's Tick = the common move 0x41b2c0 with a zero step
-                       (sweep, platform, knock timer) */
+        anim = -1;                        /* the set-up states have no animation of their own */
+    enemy_move(e, pl, Vec3{0, 0, 0}, dt); /* Enemy::Update: Stand's Tick = the common move 0x41b2c0
+                                             with a zero step (sweep, platform, knock timer) */
     {
         int found;
         float gy, h2 = e->P.height * 0.5f;
-        int on = enemy_probe(e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
+        int on = enemy_probe(e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
                              &found); /* ground following 0x41a4e0 */
         e->vfall += 200.0f * dt - 0.2f * e->vfall;
         e->pos.y -= e->vfall;
@@ -2302,8 +2302,8 @@ static void enemy_reset(Enemy *e) {
     in->anim = 0;
     in->anim_time = 0;
     in->anim_speed = 0;
-    e->lanim = -1;       /* 0x42e250 */
-    e->plat_inst = NULL; /* both probes reset (0x436d10) */
+    e->lanim = -1;          /* 0x42e250 */
+    e->plat_inst = nullptr; /* both probes reset (0x436d10) */
     e->need_snap = e->type < 13;
     if (g_epl)
         ground_snap(e, g_epl);
@@ -2345,10 +2345,10 @@ static void enemy_reset(Enemy *e) {
  * (inst+0x104, vtbl[4] 0x403fe0) bit 0x400 on / off, the "attackable" bit the target finder
  * 0x4632e0 reads. The handler tests bit 0 of the instance REF, not of anything in the instance
  * (0x403496 / 0x4034de: test byte [msg+8], 1), so only odd slots are touched; it calls vtbl[4]
- * before the NULL test and never checks its result (the classes whose vtbl[4] is 0x4078b0 = NULL,
- * e.g. 41/60/70/90/100/110, would crash the original). No shipped level sends either message; of
- * the classes with a type word only the enemies (4..16) are targets in the port, so the others are
- * ignored here. */
+ * before the nullptr test and never checks its result (the classes whose vtbl[4] is 0x4078b0 =
+ * nullptr, e.g. 41/60/70/90/100/110, would crash the original). No shipped level sends either
+ * message; of the classes with a type word only the enemies (4..16) are targets in the port, so the
+ * others are ignored here. */
 void enemies_msg1201(EnemySet *s, Instance *inst, uint32_t ref, int on) {
     if (!inst || !(ref & 1))
         return;
@@ -2361,7 +2361,7 @@ void enemies_msg1201(EnemySet *s, Instance *inst, uint32_t ref, int on) {
  * of the 28 levels send n = 0, 1, 4, 5, 6, 7, 8, 13, 32, 33, 37 (scan: docs/MESSAGES.md 11); the
  * rest is ported from the handler all the same. */
 void enemies_msg11(EnemySet *s, Instance *inst, int n, int v) {
-    Enemy *e = NULL;
+    Enemy *e = nullptr;
     for (int i = 0; i < s->n; i++)
         if (s->e[i].inst == inst)
             e = &s->e[i];

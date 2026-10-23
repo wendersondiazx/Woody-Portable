@@ -1,4 +1,4 @@
-/* main_engine.c - WoodyRE native engine prototype: loads a level (.gel/.tex/.ins + code), runs the
+/* main_engine.cpp - WoodyRE game loop: loads a level (.gel/.tex/.ins + code), runs the
  * EKO CODE script VM every frame and renders world + instances with OpenGL.
  *
  * usage: woody.exe <Data dir> <LVL>            e.g. woody.exe extract/Data W1A
@@ -11,6 +11,7 @@
  */
 #define WIN32_LEAN_AND_MEAN
 #include "plat.h"
+#include "engine.hpp"
 #ifdef WOODY_PSP
 #include "presentation_psp.h"
 #endif
@@ -43,7 +44,7 @@
 #ifdef WOODY_GUI
 #define WOODY_DEBUG_TITLE 0 /* the release build keeps the plain window title */
 #define WOODY_DEBUG_KEYS                                                                           \
-    (wenv("WOODY_DEBUGKEYS") != NULL) /* and the developer keys only on request */
+    (wenv("WOODY_DEBUGKEYS") != nullptr) /* and the developer keys only on request */
 #else
 #define WOODY_DEBUG_TITLE 1 /* level, fps, VM clock and player state in the title */
 #define WOODY_DEBUG_KEYS                                                                           \
@@ -71,15 +72,15 @@ static float g_dt;     /* this frame's dt, World+0x38; 0 while a level loads (it
 static EkoMsg g_retry[32];
 static int g_nretry;
 static float inst_yaw(const Instance *in) {
-    Vec3 f = mat4_apply(&in->world, (Vec3){0, -1, 0});
+    Vec3 f = mat4_apply(&in->world, Vec3{0, -1, 0});
     return atan2f(f.x - in->position.x, f.z - in->position.z);
 } /* as player_bind */
 static Instance *slot_instance(uint32_t ref) {
     if ((ref >> 24) > 1)
-        return NULL; /* scripts also use bare slot numbers; the dispatcher 0x401370 only masks &
+        return nullptr; /* scripts also use bare slot numbers; the dispatcher 0x401370 only masks &
                         0xffffff */
     uint32_t i = ref & 0xffffff;
-    return i < g_ins.nslots + 16 ? g_ins.slots[i] : NULL;
+    return i < g_ins.nslots + 16 ? g_ins.slots[i] : nullptr;
 }
 
 /* level table 0x4b12a0 (docs/GAMEFLOW.md 1): 0 House (menu backdrop), 1 WWS hub, 2..10 Woody, 11
@@ -183,7 +184,7 @@ static struct {
 static const float k_sv_defaults[8] = {1000, 300, 340, 500, 0, 400, 700, 200};
 static Camera *slot_camera(uint32_t ref) {
     uint32_t i = ref & 0xffffff;
-    return i < g_ins.nslots + 16 ? g_ins.cam_slots[i] : NULL;
+    return i < g_ins.nslots + 16 ? g_ins.cam_slots[i] : nullptr;
 }
 /* 0x424b30, the init of mode 0x20 that SetMode (0x41f56b -> 0x41e4e0) runs on EVERY SetMode(5),
  * also the re-entry of 0x459960: flip byte p+0x20 = 0, A = p+0x2c and H = Htarget = p+0x30 and Lat
@@ -220,7 +221,7 @@ static void cam_set_mode(int mode) /* SetMode 0x41f410 + 0x41eaa0 */
         g_cam.active = 0;
     g_cam.mode = mode;
     if (mode != 0x80)
-        g_cam.anim_inst = NULL;
+        g_cam.anim_inst = nullptr;
     if (mode == 1 && g_player)
         g_player->cam_init = 0;
     if (mode == 0x20)
@@ -275,7 +276,7 @@ static void cam_side_start(Instance *in, int v) /* Perso::0x459960 */
          B = ins_point_world(in, mo->nodes[node].point_base + 1), d = {B.x - A.x, 0, B.z - A.z};
     float l = sqrtf(d.x * d.x + d.z * d.z);
     if (l < 0.01f)
-        d = (Vec3){1, 0, 0};
+        d = Vec3{1, 0, 0};
     else {
         d.x /= l;
         d.z /= l;
@@ -327,7 +328,7 @@ static void cam_msg(const EkoMsg *m, const Camera *c) {
                                                                                                */
     case 510:
     case 520: {
-        Instance *t = m->nargs > 2 ? slot_instance(0x1000000 | (m->args[2] & 0xffffff)) : NULL;
+        Instance *t = m->nargs > 2 ? slot_instance(0x1000000 | (m->args[2] & 0xffffff)) : nullptr;
         if (!t)
             break;
         g_cam.fix_pos = c->position;
@@ -437,8 +438,8 @@ static int rail_seg_sphere(Vec3 c, float r, Vec3 A, Vec3 B, int xz, Vec3 *o1, Ve
     }
     if (s2 > 1 && s1 <= 1)
         s2 = s1;
-    *o1 = (Vec3){A.x + (B.x - A.x) * s1, A.y + (B.y - A.y) * s1, A.z + (B.z - A.z) * s1};
-    *o2 = (Vec3){A.x + (B.x - A.x) * s2, A.y + (B.y - A.y) * s2, A.z + (B.z - A.z) * s2};
+    *o1 = Vec3{A.x + (B.x - A.x) * s1, A.y + (B.y - A.y) * s1, A.z + (B.z - A.z) * s1};
+    *o2 = Vec3{A.x + (B.x - A.x) * s2, A.y + (B.y - A.y) * s2, A.z + (B.z - A.z) * s2};
     return 1;
 }
 /* The point the rail camera wants this frame. Only the count - 1 segments of the polyline are
@@ -493,7 +494,7 @@ static Vec3 rail_nearest(const Trajectory *tr, Vec3 c, Vec3 R) {
             q = A; /* ta == tb: a doubled point, 0/0 would make the camera NaN for good */
         else {
             float s = ta / (ta - tb);
-            q = (Vec3){A.x + v.x * s, A.y + v.y * s, A.z + v.z * s};
+            q = Vec3{A.x + v.x * s, A.y + v.y * s, A.z + v.z * s};
         }
         float e = v3d2(q, c);
         if (have && !(e < best))
@@ -582,7 +583,7 @@ static void cam_update(Player *p, FreeCamera *cam, float dt, int behind_key) {
         player_look_camera(p, cam, dt);
         g_cam.pos = cam->pos;
         g_cam.active = 0;
-        g_cam.look_off = (Vec3){0, 0, 0};
+        g_cam.look_off = Vec3{0, 0, 0};
         p->cam_yaw = cam->yaw;
         return;
     }
@@ -637,9 +638,9 @@ static void cam_update(Player *p, FreeCamera *cam, float dt, int behind_key) {
         sv_ahead(&ahead, p->side_flip, q[6], dt); /* 0x4250b0 */
         Vec3 C = {p->pos.x + ahead.x, p->pos.y + ahead.y + g_cam.sv_h,
                   p->pos.z + ahead.z}; /* 0x424e30 / 0x424e35 */
-        P = (Vec3){C.x + sidev.x * lat, C.y, C.z + sidev.z * lat};
+        P = Vec3{C.x + sidev.x * lat, C.y, C.z + sidev.z * lat};
         T = p->pos;
-        g_cam.look_off = (Vec3){C.x - T.x, C.y - T.y, C.z - T.z};
+        g_cam.look_off = Vec3{C.x - T.x, C.y - T.y, C.z - T.z};
         if (wenv("WOODY_SIDELOG") &&
             (p->side_flip || (int)(p->play_time * 10) != (int)((p->play_time - dt) * 10)))
             printf("  SIDE t %.2f flip %d A %.1f H %.1f Lat %.1f blend %.3f sign %d s %+.3f ahead "
@@ -680,16 +681,16 @@ static void cam_update(Player *p, FreeCamera *cam, float dt, int behind_key) {
          * p+0x1c = 0 (0x42182f, 0x421bd6) */
         P = g_cam.rail_pt;
         T = c;
-        g_cam.look_off = (Vec3){0, 0, 0};
+        g_cam.look_off = Vec3{0, 0, 0};
     } else if (g_cam.mode == 1 || !g_cam.fix_target) {
         player_camera(p, cam, dt, behind_key);
         P = cam->pos;
         T = p->pos;
-        g_cam.look_off = (Vec3){0, 140.0f - p->cam_drop, 0};
+        g_cam.look_off = Vec3{0, 140.0f - p->cam_drop, 0};
     } else {
         P = g_cam.fix_pos;
         T = g_cam.fix_target == p->inst ? p->pos : g_cam.fix_target->position;
-        g_cam.look_off = (Vec3){0, g_cam.fix_f, 0};
+        g_cam.look_off = Vec3{0, g_cam.fix_f, 0};
     }
     Vec3 look = {T.x + g_cam.look_off.x, T.y + g_cam.look_off.y, T.z + g_cam.look_off.z};
     if (g_cam.active) { /* Transition_Travelling 0x41eb90 */
@@ -700,12 +701,12 @@ static void cam_update(Player *p, FreeCamera *cam, float dt, int behind_key) {
             g_cam.dur_from_speed = 0;
         }
         float t = g_cam.t;
-        P = (Vec3){g_cam.from_pos.x + d.x * t, g_cam.from_pos.y + d.y * t,
-                   g_cam.from_pos.z + d.z * t};
-        g_cam.look_cur = (Vec3){g_cam.look_from.x + (g_cam.look_off.x - g_cam.look_from.x) * t,
-                                g_cam.look_from.y + (g_cam.look_off.y - g_cam.look_from.y) * t,
-                                g_cam.look_from.z + (g_cam.look_off.z - g_cam.look_from.z) * t};
-        look = (Vec3){T.x + g_cam.look_cur.x, T.y + g_cam.look_cur.y, T.z + g_cam.look_cur.z};
+        P = Vec3{g_cam.from_pos.x + d.x * t, g_cam.from_pos.y + d.y * t,
+                 g_cam.from_pos.z + d.z * t};
+        g_cam.look_cur = Vec3{g_cam.look_from.x + (g_cam.look_off.x - g_cam.look_from.x) * t,
+                              g_cam.look_from.y + (g_cam.look_off.y - g_cam.look_from.y) * t,
+                              g_cam.look_from.z + (g_cam.look_off.z - g_cam.look_from.z) * t};
+        look = Vec3{T.x + g_cam.look_cur.x, T.y + g_cam.look_cur.y, T.z + g_cam.look_cur.z};
         g_cam.t = g_cam.dur > 0 ? g_cam.elapsed / g_cam.dur : 1;
         if (g_cam.t > 1)
             g_cam.t = 1;
@@ -943,7 +944,8 @@ static int file_read(void) {
         static uint8_t buf[sizeof(SaveFile)];
         size_t n = fread(buf, 1, sizeof buf, f);
         fclose(f);
-        if (n == sizeof buf && !memcmp(buf, &(uint32_t){SAVE_VER}, 4)) {
+        constexpr uint32_t save_version = SAVE_VER;
+        if (n == sizeof buf && !memcmp(buf, &save_version, sizeof save_version)) {
             memcpy(&g_file, buf, sizeof g_file);
             if (k)
                 printf("save: imported %s\n", src[k]);
@@ -995,10 +997,8 @@ static int char_of_level(int i) {
 static int slot_char_pct(const SaveSlot *s,
                          int c) /* 0x450050: weights of the finished levels, 100 each */
 {
-    static const int8_t W[29] = {
-        [2] = 6,   [3] = 7,   [4] = 8,   [5] = 9,   [6] = 12,  [7] = 13,  [8] = 14,
-        [9] = 15,  [10] = 16, [12] = 14, [13] = 15, [14] = 16, [15] = 17, [16] = 18,
-        [17] = 20, [19] = 14, [20] = 15, [21] = 16, [22] = 17, [23] = 18, [24] = 20};
+    static const int8_t W[29] = {0,  0,  6,  7, 8,  9,  12, 13, 14, 15, 16, 0, 14, 15, 16,
+                                 17, 18, 20, 0, 14, 15, 16, 17, 18, 20, 0,  0, 0,  0};
     int p = 0;
     for (int L = 0; L < 29; L++)
         if (char_of_level(L) == c && s->chr[c].rec[L].done)
@@ -1217,14 +1217,15 @@ gfx_apply(void) /* the Graphics page's settings (all port extras); cheap, no win
  * Detect.exe); a code < 0x200 is a DirectInput key, 0x200 + n joystick button n. The port keeps VK
  * codes. */
 #define IN_JOY 0x200
-static struct {
+struct InputState {
     int bind[12][4]; /* per action: up to 4 VK codes or IN_JOY + button, 0 ends the list (Woody.cfg
                         fills 2, the port defaults more) */
-    int mode; /* app+0x104 (0x44fc05): 0 keyboard only (cfg+0x114 == 1), 1 / 2 joystick (cfg+0x110
-               * != 0 / == 0): the keyboard gives no directions then (0x40301e); 3 = port, no
-               * Woody.cfg: keyboard and joystick both */
+    int mode =
+        3; /* app+0x104 (0x44fc05): 0 keyboard only (cfg+0x114 == 1), 1 / 2 joystick (cfg+0x110
+            * != 0 / == 0): the keyboard gives no directions then (0x40301e); 3 = port, no
+            * Woody.cfg: keyboard and joystick both */
     int have_cfg;
-    int joy;
+    int joy = -1;
     unsigned jxmin, jxmax, jymin, jymax;
     double joy_scan; /* the WinMM device (the original: the first attached DirectInput joystick,
                         0x4678d0) */
@@ -1236,7 +1237,8 @@ static struct {
     int pbind[12][4]; /* PORT EXTRA: the pad buttons per action (PAD_* + 1 of pad.h, 0 ends the
                          list); Woody.cfg does not know them */
     PadState pad;     /* this frame's pads (src/pad.c), all of them together */
-} g_in = {.joy = -1, .mode = 3};
+};
+static InputState g_in{};
 static int in_dik_vk(
     int d) /* DIK scan code (Woody.cfg) -> VK: the extended keys by table, the rest by the layout */
 {
@@ -1295,7 +1297,7 @@ static int wcfg_read(const char *data_dir, unsigned char *b, const char **used) 
     static char alt[600];
     const char *try_[3] = {wenv("WOODY_CFG"), "Woody.cfg", alt};
     snprintf(alt, sizeof alt, "%s/../Woody.cfg", data_dir);
-    FILE *f = NULL;
+    FILE *f = nullptr;
     int k;
     for (k = 0; k < 3 && !f; k++)
         if (try_[k])
@@ -1325,7 +1327,7 @@ static int wcfg_read(const char *data_dir, unsigned char *b, const char **used) 
  * WOODY_REVSTEREO=0/1 overrides the reverse stereo for a run without saving it (testing, main). */
 static void setup_import(const char *data_dir) {
     unsigned char b[0x120];
-    const char *path = NULL;
+    const char *path = nullptr;
     int r = wcfg_read(data_dir, b, &path);
     if (r > 0) {
         int live = CFG32(0x68) || CFG32(0x6c) || CFG32(0x70);
@@ -1367,7 +1369,7 @@ static void setup_import(const char *data_dir) {
 static void in_read_wcfg(const char *data_dir) {
     in_defaults();
     unsigned char b[0x120];
-    const char *path = NULL;
+    const char *path = nullptr;
     int r = wcfg_read(data_dir, b, &path);
     if (!r) {
         puts("input: no Woody.cfg, port keys");
@@ -1762,7 +1764,7 @@ static void ctl_apply_cfg(
             continue;
         }
         int codes[4] = {0}, n = 0;
-        for (char *t = strtok(eq + 1, ","); t && n < 4; t = strtok(NULL, ",")) {
+        for (char *t = strtok(eq + 1, ","); t && n < 4; t = strtok(nullptr, ",")) {
             while (*t == ' ')
                 t++;
             char *e = t + strlen(t);
@@ -1945,7 +1947,7 @@ static int results_cats(const int *st) {
 static void script_action_camera(void) /* the tail of 0x44dda0: an action whose animation carries a
                                           camera track becomes the camera (0x44df67) */
 {
-    Instance *pi = g_player ? g_player->inst : NULL;
+    Instance *pi = g_player ? g_player->inst : nullptr;
     Vec3 e, t;
     if (pi && (uint32_t)pi->anim < pi->model->nanims &&
         ins_camera_eval(pi, pi->anim, 0.0f, &e, &t)) {
@@ -2009,7 +2011,7 @@ static void results_prop(Instance *pr, Vec3 p0, Vec3 dir) {
         F.x /= l;
         F.z /= l;
     } else
-        F = (Vec3){0, 0, 0};                /* [0x4a9004]: too short, the zero vector stays */
+        F = Vec3{0, 0, 0};                  /* [0x4a9004]: too short, the zero vector stays */
     Vec3 U = {0, 1, 0}, R = {-F.z, 0, F.x}; /* F x U */
     pr->position = p0;
     if (l > 1e-4f)
@@ -2030,7 +2032,7 @@ static void results_begin(EkoVM *vm, Instance *door, uint32_t var) /* 0x453d90 *
     if (!have) {
         float y = inst_yaw(door) + 3.14159265f;
         p0 = door->position;
-        dir = (Vec3){sinf(y), 0, cosf(y)};
+        dir = Vec3{sinf(y), 0, cosf(y)};
     } /* port fallbacks: the original would use the stale stack buffer */
     memset(&g_res, 0, sizeof g_res);
     g_res.on = 1;
@@ -2054,7 +2056,8 @@ static void results_begin(EkoVM *vm, Instance *door, uint32_t var) /* 0x453d90 *
     if (g_prop)
         results_prop(g_prop, p0, dir);
     hud_results_enter();
-    audio_fx(63, NULL, NULL); /* menu page 0x1e (0x404df0): 0x4544b0 + 0x45b8c0, SoundFx 0x3f */
+    audio_fx(63, nullptr,
+             nullptr); /* menu page 0x1e (0x404df0): 0x4544b0 + 0x45b8c0, SoundFx 0x3f */
     printf("  RESULTS begin: level %s, score %d, best %d%s",
            k_levels[lvl >= 0 && lvl < 29 ? lvl : 0], g_res.score, g_res.best,
            g_res.high ? " (new record)" : ""),
@@ -2474,7 +2477,7 @@ static const MenuItem *menu_items(int page, int *n, float *yfrac) {
 #undef PG
     *n = 0;
     *yfrac = 0;
-    return NULL;
+    return nullptr;
 }
 /* 0x446920 up: back one, round, over the headers, blink phase 0. 0x446970 down: on one, phase 0 if
  * it moved, else 0.25 */
@@ -2520,10 +2523,10 @@ static void panel_enter(void) {
     M.p.iris_on = 1;
     panel_iris(0, 0.37f);
     M.delay = 0.5f;
-    audio_fx(63, NULL, NULL);
+    audio_fx(63, nullptr, nullptr);
 } /* 0x45b8c0 */
 static void panel_close(int ok, int result) {
-    audio_fx(63, NULL, NULL);
+    audio_fx(63, nullptr, nullptr);
     panel_iris(0.37f, 0);
     M.p.closing = M.p.lock = 1;
     M.p.t = M.p.ti = 0;
@@ -2571,16 +2574,17 @@ static int slot_step(int page, int cur, int key) /* key 0 down, 1 up, 2 right, 3
  * page shows the four records' figure + pedestal and puts them in front of the title camera every
  * frame (0x45edc0 -> 0x451890 / 0x489210). The camera itself keeps orbiting: the carousel hangs in
  * front of the lens and the tree house turns behind it. */
-static struct {
+struct CarouselState {
     Instance *fig[4], *ped[4];
     int role[4]; /* record +0x60 / +0x64; role = the figure's registration n (inst+0x184): 0..3, 4 =
                     "?" */
     int open[4]; /* record +0x4c */
-    int sel;     /* +0x114: place 1..4 */
-    float pos, start, target, rt;          /* +0x118 / +0x11c / +0x120 / +0x138 (turn time) */
-    int rot_l, rot_r, slide_out, slide_in; /* +0x13c / +0x13d / page +0x20 / +0x21 */
+    int sel = 1; /* +0x114: place 1..4 */
+    float pos = 1.0f, start, target = 1.0f, rt; /* +0x118 / +0x11c / +0x120 / +0x138 (turn time) */
+    int rot_l, rot_r, slide_out, slide_in;      /* +0x13c / +0x13d / page +0x20 / +0x21 */
     int shown;
-} g_car = {.sel = 1, .pos = 1.0f, .target = 1.0f};
+};
+static CarouselState g_car{};
 static MenuItem k_page3[2] = {{42, 1},
                               {41, 0x21}}; /* 0x4b5e50 "PLAY", 0x4b5e60 "SEE HIGH SCORES" (x 0.8) */
 static void car_forget(void) {
@@ -2780,9 +2784,9 @@ static void car_place(const FreeCamera *cam) {
         m[14] = P.z;
         m[15] = 1;
         Instance *two[2] = {g_car.fig[k], g_car.ped[k]};
-        /* 0x489650 = 0x489210 then 0x4077f0(NULL): re-celled at the placed point every frame. Left
-         * to its clock (the animated root), a figure the house swept through got no sector, dropped
-         * out of the list and never came back */
+        /* 0x489650 = 0x489210 then 0x4077f0(nullptr): re-celled at the placed point every frame.
+         * Left to its clock (the animated root), a figure the house swept through got no sector,
+         * dropped out of the list and never came back */
         for (int j = 0; j < 2; j++)
             if (two[j]) {
                 two[j]->position = P;
@@ -2866,14 +2870,10 @@ car_location(const SaveSlot *s,
 }
 /* 0x45ec50 (table 0x45ed60), the same pairs as the rows of page 4: 47 Space / 48 Pirate / 49 House
  * + 51..54 Part A..D / 55 Race */
-static const uint8_t k_loc_w[29] = {
-    [2] = 47,  [3] = 47,  [4] = 48,  [5] = 48,  [6] = 48,  [7] = 49,  [8] = 49,
-    [9] = 49,  [10] = 49, [12] = 47, [13] = 47, [14] = 48, [15] = 48, [16] = 49,
-    [17] = 49, [19] = 47, [20] = 47, [21] = 48, [22] = 48, [23] = 49, [24] = 49};
-static const uint8_t k_loc_p[29] = {
-    [2] = 51,  [3] = 52,  [4] = 51,  [5] = 52,  [6] = 53,  [7] = 51,  [8] = 52,
-    [9] = 53,  [10] = 54, [12] = 51, [13] = 55, [14] = 51, [15] = 55, [16] = 51,
-    [17] = 55, [19] = 51, [20] = 55, [21] = 51, [22] = 55, [23] = 51, [24] = 55};
+static const uint8_t k_loc_w[29] = {0,  0,  47, 47, 48, 48, 48, 49, 49, 49, 49, 0, 47, 47, 48,
+                                    48, 49, 49, 0,  47, 47, 48, 48, 49, 49, 0,  0, 0,  0};
+static const uint8_t k_loc_p[29] = {0,  0,  51, 52, 51, 52, 53, 51, 52, 53, 54, 0, 51, 55, 51,
+                                    55, 51, 55, 0,  51, 55, 51, 55, 51, 55, 0,  0, 0,  0};
 static void carousel_draw(float dt) {
     (void)dt;
     if (M.p.lock && M.p.ti >= 0.5f)
@@ -2979,7 +2979,7 @@ static void menu_enter(int page) {
     switch (page) {
     case 1: /* 0x460070 */
         M.sel = 0;
-        audio_fx(63, NULL, NULL);
+        audio_fx(63, nullptr, nullptr);
         memset(&M.p, 0, sizeof M.p);
         M.p.iris_on = M.p1_iris;
         M.p.opening = 1;
@@ -3097,7 +3097,7 @@ static void menu_title_page0(void) {
 static void menu_new_game(EkoVM *vm, int attract) {
     int32_t *iv = g_have_intro && (g_intro_var & 0xffffff) < vm->nvars
                       ? &vm->varval[g_intro_var & 0xffffff]
-                      : NULL;
+                      : nullptr;
     hud_logo_off();
     M.newgame = !attract;
     if (iv)
@@ -3259,7 +3259,7 @@ static void menu_update(EkoVM *vm, const MenuKeys *k, float dt) {
     } /* 0x4464f0: no input while the delay runs */
     int32_t *iv = g_have_intro && (g_intro_var & 0xffffff) < vm->nvars
                       ? &vm->varval[g_intro_var & 0xffffff]
-                      : NULL;
+                      : nullptr;
     int n;
     float yf;
     const MenuItem *it = menu_items(M.page, &n, &yf);
@@ -3815,7 +3815,7 @@ static Laser *laser_of(const Instance *in) {
     for (int i = 0; i < g_nlasers; i++)
         if (g_lasers[i].inst == in)
             return &g_lasers[i];
-    return NULL;
+    return nullptr;
 }
 static int laser_segment(const Laser *z, uint32_t marker, const GelFile *gel, Vec3 *a, Vec3 *b,
                          int *kind) {
@@ -3856,10 +3856,10 @@ static int laser_segment(const Laser *z, uint32_t marker, const GelFile *gel, Ve
          * press tip z -60.4) or inside it, which the one-sided test lets the beam leave (W3B 737,
          * model 47). Woody and the enemies have no press nodes, so the beam passes through them;
          * only the hit test below kills (the player) */
-        const Instance *hi = NULL;
+        const Instance *hi = nullptr;
         if (z->type == 51 &&
             inst_point_in_press(
-                gel, &g_ins, NULL, *a,
+                gel, &g_ins, nullptr, *a,
                 &hi)) { /* hit kind 3 (raw answer 2, 0x4330c0 in the instance test 0x432ab0 =
                          * vtbl[5]): the start lies inside a press node; [0x53a558] = 0 (0x4330d4),
                          * so 0x4513cd puts b on a, rec+0x2c = 1 and the normal 0x4b3108 stays
@@ -3883,10 +3883,10 @@ static int laser_segment(const Laser *z, uint32_t marker, const GelFile *gel, Ve
         float t = gel_ray_frac(gel, *a, *b), tw = t < 1.0f ? t : 1.0f,
               ti; /* the instances only up to the wall: a small box to cull with */
         Vec3 bw = {a->x + (b->x - a->x) * tw, a->y + (b->y - a->y) * tw, a->z + (b->z - a->z) * tw};
-        if (inst_ray_press(gel, &g_ins, NULL, *a, bw, &ti, NULL, &hi) && ti * tw < t)
+        if (inst_ray_press(gel, &g_ins, nullptr, *a, bw, &ti, nullptr, &hi) && ti * tw < t)
             t = ti * tw;
         else
-            hi = NULL;
+            hi = nullptr;
         if (t <= 1.0f) {
             b->x = a->x + (b->x - a->x) * t;
             b->y = a->y + (b->y - a->y) * t;
@@ -3929,7 +3929,7 @@ static int laser_segment(const Laser *z, uint32_t marker, const GelFile *gel, Ve
  * .. feet + H - 0.1 (H = 61 while ducked: he ducks under the beam) */
 static int laser_hits_player(Vec3 a, Vec3 b, const Player *p) {
     float hh = player_body_height(p) * 0.5f,
-          t = seg_cyl(a, b, (Vec3){p->pos.x, p->pos.y + hh, p->pos.z}, 69.0f * 0.85f, hh);
+          t = seg_cyl(a, b, Vec3{p->pos.x, p->pos.y + hh, p->pos.z}, 69.0f * 0.85f, hh);
     return t >= 0 && !(t > 1.0f); /* 0x450ff2, 0x451002 */
 }
 static void laser_fx_init(LaserFx *fx) /* 0x46e4a0 */
@@ -4006,21 +4006,21 @@ static void laser_fx_draw(LaserFx *fx, Vec3 a, Vec3 b, int kind, float g, const 
             Vec3 w = {d.x / len, d.y / len, d.z / len}, u,
                  v; /* 0x46d320: rows u, v, w = the beam direction */
             if (w.x < 0.001f && w.x > -0.001f && w.z < 0.001f && w.z > -0.001f) {
-                v = (Vec3){0, w.z, -w.y};
+                v = Vec3{0, w.z, -w.y};
                 float l = sqrtf(v.y * v.y + v.z * v.z);
                 if (l > 0) {
                     v.y /= l;
                     v.z /= l;
                 }
-                u = (Vec3){v.y * w.z - v.z * w.y, v.z * w.x - v.x * w.z, v.x * w.y - v.y * w.x};
+                u = Vec3{v.y * w.z - v.z * w.y, v.z * w.x - v.x * w.z, v.x * w.y - v.y * w.x};
             } else {
-                u = (Vec3){w.z, 0, -w.x};
+                u = Vec3{w.z, 0, -w.x};
                 float l = sqrtf(u.x * u.x + u.z * u.z);
                 if (l > 0) {
                     u.x /= l;
                     u.z /= l;
                 }
-                v = (Vec3){w.y * u.z - w.z * u.y, w.z * u.x - w.x * u.z, w.x * u.y - w.y * u.x};
+                v = Vec3{w.y * u.z - w.z * u.y, w.z * u.x - w.x * u.z, w.x * u.y - w.y * u.x};
             }
             static const float white[3] = {1, 1, 1};
             Vec3 prev = a;
@@ -4092,7 +4092,7 @@ static void fx_explode(int kind, Vec3 pos, Vec3 n);
 static void blast_add(Vec3 p, float R) {
     for (int i = 0; i < 16; i++)
         if (g_blasts[i].t <= 0) {
-            g_blasts[i] = (Blast){p, 1e-4f, R};
+            g_blasts[i] = Blast{p, 1e-4f, R};
             return;
         }
 }
@@ -4107,8 +4107,8 @@ static void exhaust_smoke(Vec3 from, Vec3 to, float *acc, float dt) {
         n = 24;
     for (int k = 0; k < n; k++) {
         float u = (k + 0.5f) / n;
-        puff_add((Vec3){from.x + (to.x - from.x) * u, from.y + (to.y - from.y) * u,
-                        from.z + (to.z - from.z) * u});
+        puff_add(Vec3{from.x + (to.x - from.x) * u, from.y + (to.y - from.y) * u,
+                      from.z + (to.z - from.z) * u});
     }
 }
 static void fx_smoke_draw(float dt) {
@@ -4160,7 +4160,7 @@ static Missile *missile_of(const Instance *in) {
     for (int i = 0; i < g_nmissiles; i++)
         if (g_missiles[i].inst == in)
             return &g_missiles[i];
-    return NULL;
+    return nullptr;
 }
 static void missile_add(Instance *in) /* SetTypeInstance 41, 0x403b5d */
 {
@@ -4189,8 +4189,8 @@ missile_place(Missile *mi, Vec3 pos,
             v.z /= l;
             Z = dir;
             Y = v;
-            X = (Vec3){v.y * dir.z - v.z * dir.y, v.z * dir.x - v.x * dir.z,
-                       v.x * dir.y - v.y * dir.x};
+            X = Vec3{v.y * dir.z - v.z * dir.y, v.z * dir.x - v.x * dir.z,
+                     v.x * dir.y - v.y * dir.x};
         }
     } else { /* 0x46d417 */
         Vec3 a = {dir.z, 0, -dir.x};
@@ -4200,8 +4200,8 @@ missile_place(Missile *mi, Vec3 pos,
             a.z /= l;
             Z = dir;
             X = a;
-            Y = (Vec3){dir.y * a.z - dir.z * a.y, dir.z * a.x - dir.x * a.z,
-                       dir.x * a.y - dir.y * a.x};
+            Y = Vec3{dir.y * a.z - dir.z * a.y, dir.z * a.x - dir.x * a.z,
+                     dir.x * a.y - dir.y * a.x};
         }
     }
     in->position = pos;
@@ -4231,7 +4231,7 @@ static Missile *missile_take(Vec3 pos, Vec3 dir) /* 0x4722f0 */
     }
     if (wenv("WOODY_FXLOG"))
         printf("missile pool (%d) empty: this shot flies without a model", g_nmissiles), puts("");
-    return NULL; /* the rest of the visual runs anyway */
+    return nullptr; /* the rest of the visual runs anyway */
 }
 static void missile_release(Missile *mi) {
     if (mi && mi->taken) {
@@ -4272,14 +4272,14 @@ static void missile_exhaust(Missile *mi, float dt) {
         if (fabsf(d.x) < 0.001f && fabsf(d.z) < 0.001f) {
             float vl = sqrtf(d.z * d.z + d.y * d.y);
             if (vl > 1e-6f) {
-                R1 = (Vec3){0, d.z / vl, -d.y / vl};
-                R0 = (Vec3){R1.y * d.z - R1.z * d.y, R1.z * d.x - R1.x * d.z,
-                            R1.x * d.y - R1.y * d.x};
+                R1 = Vec3{0, d.z / vl, -d.y / vl};
+                R0 =
+                    Vec3{R1.y * d.z - R1.z * d.y, R1.z * d.x - R1.x * d.z, R1.x * d.y - R1.y * d.x};
             }
         } else {
             float al = sqrtf(d.z * d.z + d.x * d.x);
-            R0 = (Vec3){d.z / al, 0, -d.x / al};
-            R1 = (Vec3){d.y * R0.z - d.z * R0.y, d.z * R0.x - d.x * R0.z, d.x * R0.y - d.y * R0.x};
+            R0 = Vec3{d.z / al, 0, -d.x / al};
+            R1 = Vec3{d.y * R0.z - d.z * R0.y, d.z * R0.x - d.x * R0.z, d.x * R0.y - d.y * R0.x};
         }
         for (int q = 0; q < 255; q += 85) {
             int a = ((int)(mi->f3 * 512.0f + (float)q)) & 511;
@@ -4344,7 +4344,7 @@ static BombFx g_bombfx[32];
 static void bombfx_add(Vec3 p, Vec3 n, int kind) {
     for (int i = 0; i < 32; i++)
         if (g_bombfx[i].t <= 0) {
-            g_bombfx[i] = (BombFx){p, n, 1e-4f, kind};
+            g_bombfx[i] = BombFx{p, n, 1e-4f, kind};
             return;
         }
 }
@@ -4352,7 +4352,7 @@ static Bomb *bomb_of(const Instance *in) {
     for (int i = 0; i < g_nbombs; i++)
         if (g_bombs[i].inst == in)
             return &g_bombs[i];
-    return NULL;
+    return nullptr;
 }
 static void bomb_place(Bomb *b) {
     Instance *in = b->inst;
@@ -4383,7 +4383,7 @@ bombs_discard_all(void) /* 0x44db10 from the Perso reset: no explosion, the vari
 /* 0x44d5d0 + Launch 0x44d4d0: the first free bomb of the pool, on `pos`, moving along `dir`
  * (normalised by the caller) */
 static Bomb *bomb_start(const BombT *T, Vec3 pos, Vec3 dir, int ground, int32_t var, int kind) {
-    Bomb *b = NULL;
+    Bomb *b = nullptr;
     for (int i = 0; i < g_nbombs && !b; i++)
         if (!g_bombs[i].in_use)
             b = &g_bombs[i];
@@ -4391,7 +4391,7 @@ static Bomb *bomb_start(const BombT *T, Vec3 pos, Vec3 dir, int ground, int32_t 
         puts("  BOMB: Pas de bombes, ou plus assez de bombes dans ce niveau...");
         if (var >= 0)
             game_var_set((uint32_t)var, 1);
-        return NULL;
+        return nullptr;
     }
     b->T = *T;
     b->fuse = T->life;
@@ -4408,18 +4408,18 @@ static Bomb *bomb_start(const BombT *T, Vec3 pos, Vec3 dir, int ground, int32_t 
             ip.y = gy + 1.0f;
     }
     b->p = pos;
-    b->vel = (Vec3){dir.x * T->speed, dir.y * T->speed, dir.z * T->speed};
+    b->vel = Vec3{dir.x * T->speed, dir.y * T->speed, dir.z * T->speed};
     b->inst->position = ip;
     b->inst->visible = 1;
     b->inst->fade = b->inst->fade_target = 0;
     b->var = var;
     b->kind = kind;
-    b->launcher = NULL;
+    b->launcher = nullptr;
     b->in_use = 1;
     b->held = b->ridden = 0;
-    b->owner_e = NULL;
+    b->owner_e = nullptr;
     b->owner_pl = 0;
-    b->target = NULL;
+    b->target = nullptr;
     b->age = 0;
     b->dir0 = dir;
     b->t = 0;
@@ -4429,7 +4429,7 @@ static Bomb *bomb_start(const BombT *T, Vec3 pos, Vec3 dir, int ground, int32_t 
     b->puffed = 0;
     b->p_active = 1;
     b->press = b->grounded = b->bounced = 0;
-    b->n = (Vec3){0, 1, 0};
+    b->n = Vec3{0, 1, 0};
     b->col_cur = 0xffffffffu; /* a new projectile 0x449130: probe ctor 0x436cf0 (a throw 0x4492d0
                                  keeps it) */
     bomb_place(b);
@@ -4448,10 +4448,10 @@ void game_bomb_launch(struct Bomb *b, Vec3 dir, float speed) {
         return;
     b->held = 0;
     b->p = b->inst->position;
-    b->vel = (Vec3){dir.x * speed, dir.y * speed, dir.z * speed};
+    b->vel = Vec3{dir.x * speed, dir.y * speed, dir.z * speed};
     b->press = b->grounded = 0;
     b->target = b->owner_e ? b->owner_e->inst : b->launcher;
-    b->owner_e = NULL;
+    b->owner_e = nullptr;
     b->owner_pl = 1;
     b->dir0 = dir; /* 0x463894: T.target = the old owner, T.owner = the Perso */
     /* the age P+0xd4 runs on: Reinit 0x4492d0 copies T, pos, dir, speed and clears
@@ -4487,7 +4487,7 @@ struct Bomb *game_bomb_pick(Vec3 pos, float r) {
             return b;
         }
     }
-    return NULL;
+    return nullptr;
 }
 void game_bomb_hold(struct Bomb *b, Vec3 pos, Quat q) {
     b->inst->position = pos;
@@ -4510,7 +4510,7 @@ static void bomb_explode(Bomb *b) {
                   pl->inst->position.z - c.z};
         if (d.x * d.x + d.y * d.y + d.z * d.z < 400.0f * 400.0f && pl->invuln_respawn <= 0) {
             float l = sqrtf(d.x * d.x + d.z * d.z);
-            player_hit(pl, 0, l > 1e-3f ? (Vec3){d.x / l, 0, d.z / l} : (Vec3){0, 0, 1});
+            player_hit(pl, 0, l > 1e-3f ? Vec3{d.x / l, 0, d.z / l} : Vec3{0, 0, 1});
             pad_rumble(1.0f, 0.5f);
             player_kill(pl, 6); /* rumble 0x44d1b0(+0x1d4, +0x1d0) = P+0xc4, P+0xc0 */
             printf("  BOMB %u blast kills the player", b->inst->index), puts("");
@@ -4524,7 +4524,7 @@ static void bomb_explode(Bomb *b) {
     if (b->kind == 1)
         game_explosion(e);
     else {
-        Vec3 bn = b->bounced ? b->n : (Vec3){0, 1, 0};
+        Vec3 bn = b->bounced ? b->n : Vec3{0, 1, 0};
         bombfx_add(e, bn, 0);
         fx_explode(0, e, bn);
     } /* 0x477060(kind, pos, plane of the last bounce) */
@@ -4661,19 +4661,19 @@ static void bombs_fly(float dt, const GelFile *gel) {
                 v.x = dx / dl * (1 - kk) + v.x * kk;
                 v.z = dz / dl * (1 - kk) + v.z * kk;
                 float vl = sqrtf(vdot3(v, v));
-                b->vel = (Vec3){v.x / vl * s, v.y / vl * s, v.z / vl * s};
+                b->vel = Vec3{v.x / vl * s, v.y / vl * s, v.z / vl * s};
                 if (1.0f + b->vel.y * b->dir0.y < 0.7f) {
                     b->vel.y = old.y;
                     float l2 = sqrtf(vdot3(b->vel, b->vel));
                     if (l2 > 1e-6f)
-                        b->vel = (Vec3){b->vel.x / l2 * s, b->vel.y / l2 * s, b->vel.z / l2 * s};
+                        b->vel = Vec3{b->vel.x / l2 * s, b->vel.y / l2 * s, b->vel.z / l2 * s};
                 } /* 0x4498ec, literally */
                 if (b->vel.x * b->dir0.x + b->vel.z * b->dir0.z < 0.7f) {
                     b->vel.x = old.x;
                     b->vel.z = old.z;
                     float l2 = sqrtf(vdot3(b->vel, b->vel));
                     if (l2 > 1e-6f)
-                        b->vel = (Vec3){b->vel.x / l2 * s, b->vel.y / l2 * s, b->vel.z / l2 * s};
+                        b->vel = Vec3{b->vel.x / l2 * s, b->vel.y / l2 * s, b->vel.z / l2 * s};
                 }
             }
         }
@@ -4684,11 +4684,11 @@ static void bombs_fly(float dt, const GelFile *gel) {
             Enemy *hit = enemies_bomb_contact(&g_enemies, b->owner_e, a, e, 2.0f * b->T.radius);
             if (hit) {
                 if (!b->owner_e && !b->owner_pl)
-                    enemy_hit(hit, b->T.damage, (Vec3){0, 0, 0}, e,
+                    enemy_hit(hit, b->T.damage, Vec3{0, 0, 0}, e,
                               0); /* a launcher's or nobody's bomb: vtbl[39](0, 1000) = his "pecked"
                                      stun; owner Perso / enemy: carried, no damage */
                 b->p = e;
-                b->inst->position = (Vec3){e.x, e.y + 1.0f, e.z};
+                b->inst->position = Vec3{e.x, e.y + 1.0f, e.z};
                 bomb_explode(b);
                 if (wenv("WOODY_BOMBLOG"))
                     printf("  BOMB %u hits the thrower %u", b->inst->index, hit->inst->index),
@@ -4697,8 +4697,8 @@ static void bombs_fly(float dt, const GelFile *gel) {
             }
         }
         {
-            const Instance *hi = NULL; /* hit kind 3: the start inside a press node (not its own) ->
-                                          projectile gone -> CheckProj ignites */
+            const Instance *hi = nullptr; /* hit kind 3: the start inside a press node (not its own)
+                                          -> projectile gone -> CheckProj ignites */
             if (inst_point_in_press(gel, &g_ins, b->inst, a, &hi)) {
                 b->p_active = 0;
                 if (wenv("WOODY_BOMBLOG"))
@@ -4709,7 +4709,8 @@ static void bombs_fly(float dt, const GelFile *gel) {
             }
         }
         float f = gel_ray_hit(gel, a, e, &n);
-        if (g_player && player_ray_instances(g_player, b->inst, a, e, &fi, &ni, NULL) && fi < f) {
+        if (g_player && player_ray_instances(g_player, b->inst, a, e, &fi, &ni, nullptr) &&
+            fi < f) {
             f = fi;
             n = ni;
         } /* a press node: the same bounce */
@@ -4718,8 +4719,7 @@ static void bombs_fly(float dt, const GelFile *gel) {
             float L = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z), s = L * f - 0.01f;
             if (s < 0)
                 s = 0;
-            Vec3 h =
-                L > 1e-6f ? (Vec3){a.x + d.x / L * s, a.y + d.y / L * s, a.z + d.z / L * s} : a;
+            Vec3 h = L > 1e-6f ? Vec3{a.x + d.x / L * s, a.y + d.y / L * s, a.z + d.z / L * s} : a;
             /* 0x449f6f: e is mirrored in the hit PLANE (n.e + D, D through the exact hit a + d f),
              * not in a plane through h, which sits 0.01 short of it: the new direction r - h is a
              * touch flatter than the mirrored d (live trace, S2A dispenser) */
@@ -4730,13 +4730,13 @@ static void bombs_fly(float dt, const GelFile *gel) {
             float ul = sqrtf(u.x * u.x + u.y * u.y + u.z * u.z),
                   sp = sqrtf(b->vel.x * b->vel.x + b->vel.y * b->vel.y + b->vel.z * b->vel.z);
             if (ul > 1e-6f)
-                b->vel = (Vec3){u.x / ul * sp, u.y / ul * sp, u.z / ul * sp};
+                b->vel = Vec3{u.x / ul * sp, u.y / ul * sp, u.z / ul * sp};
             b->p = h;
             b->bounced = 1;
             b->n = n;
         } else
             b->p = e;
-        b->inst->position = (Vec3){b->p.x, b->p.y + 1.0f, b->p.z};
+        b->inst->position = Vec3{b->p.x, b->p.y + 1.0f, b->p.z};
         if (gel_cell(gel, b->inst->position) < 0) {
             bomb_explode(b);
             continue;
@@ -4744,7 +4744,7 @@ static void bombs_fly(float dt, const GelFile *gel) {
         int found = 0;
         uint32_t col = 0xffffffffu;
         float gy = g_player ? player_ground_query_col(g_player, b->inst,
-                                                      (Vec3){b->p.x, b->p.y + b->T.radius, b->p.z},
+                                                      Vec3{b->p.x, b->p.y + b->T.radius, b->p.z},
                                                       &found, &col)
                             : 0; /* probe 0x436dc0 (0x449c04) */
         game_col_probe(&b->col_cur, found && b->p.y - gy < 1.0f, col,
@@ -4760,7 +4760,7 @@ static void bombs_fly(float dt, const GelFile *gel) {
             b->vel.y = 0;
             b->p.y = gy;
         }
-        b->inst->position = (Vec3){b->p.x, b->p.y + 1.0f, b->p.z};
+        b->inst->position = Vec3{b->p.x, b->p.y + 1.0f, b->p.z};
         bomb_place(b);
         if (wenv("WOODY_BOMBLOG") &&
             (wenv("WOODY_BOMBLOG")[0] == '3' ||
@@ -4795,8 +4795,8 @@ static void bombs_draw(const float *eye, float dt) {
                 if (l > 1e-4f) {
                     Vec3 mz = {m0.x + md.x / l * 10.0f, m0.y + md.y / l * 10.0f,
                                m0.z + md.z / l * 10.0f};
-                    game_smoke_ring(mz, (Vec3){md.x / l, md.y / l, md.z / l}, 0, 0.25f, 1.5f);
-                    bombfx_add(mz, (Vec3){0, 1, 0}, 1);
+                    game_smoke_ring(mz, Vec3{md.x / l, md.y / l, md.z / l}, 0, 0.25f, 1.5f);
+                    bombfx_add(mz, Vec3{0, 1, 0}, 1);
                 }
             }
         } /* 0x478c0e: the smoke ring round the muzzle, then 0x478aa0 */
@@ -4950,7 +4950,7 @@ static Launcher *launcher_of(const Instance *in) {
     for (int i = 0; i < g_nlaunchers; i++)
         if (g_launchers[i].inst == in)
             return &g_launchers[i];
-    return NULL;
+    return nullptr;
 }
 static void flash_add(Vec3 p, int kind) {
     for (int i = 0; i < 64; i++)
@@ -4999,15 +4999,15 @@ shot_hist_at(const Shot *s,
         if (u > 1)
             u = 1;
         Vec3 a = s->hist[newest];
-        return (Vec3){a.x + (s->pos.x - a.x) * u, a.y + (s->pos.y - a.y) * u,
-                      a.z + (s->pos.z - a.z) * u};
+        return Vec3{a.x + (s->pos.x - a.x) * u, a.y + (s->pos.y - a.y) * u,
+                    a.z + (s->pos.z - a.z) * u};
     }
     for (int k = 1; k < n; k++) {
         int j = (s->nhist - 1 - k) % SHOT_HIST, j1 = (s->nhist - k) % SHOT_HIST;
         if (tq >= s->hist_t[j]) {
             float d = s->hist_t[j1] - s->hist_t[j], u = d > 1e-6f ? (tq - s->hist_t[j]) / d : 0;
             Vec3 a = s->hist[j], b = s->hist[j1];
-            return (Vec3){a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u};
+            return Vec3{a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u};
         }
     }
     return s->hist[(s->nhist - n) % SHOT_HIST]; /* older than the ribbon: its first point (all start
@@ -5057,7 +5057,7 @@ static Shot *shot_spawn(const ProjT *T, Vec3 pos, Vec3 dir, const Instance *owne
             s->pos = s->origin = pos;
             s->dir = s->dir0 = dir;
             s->speed = T->speed;
-            s->vel = (Vec3){dir.x * T->speed, dir.y * T->speed, dir.z * T->speed};
+            s->vel = Vec3{dir.x * T->speed, dir.y * T->speed, dir.z * T->speed};
             s->life = T->life;
             s->damage = T->damage;
             s->visual = T->visual;
@@ -5065,7 +5065,7 @@ static Shot *shot_spawn(const ProjT *T, Vec3 pos, Vec3 dir, const Instance *owne
             shot_begin(s, owner, sound_fx);
             return s;
         }
-    return NULL;
+    return nullptr;
 }
 static Vec3 shot_target_pos(const Instance *t) {
     return g_player && t == g_player->inst ? g_player->pos : t->position;
@@ -5104,14 +5104,14 @@ static void launcher_fire(Launcher *l) /* 0x452560 -> 0x4490a0 / 0x449130 */
         0) { /* the bomb thrower: 0x44d5d0(&L->T, 0, -1, 0), SoundFx 14 on the launcher */
         BombT t = {l->t.radius, l->t.gravity, l->t.speed, l->t.damp_g,
                    l->t.damp_a, l->t.life,    l->t.damage};
-        Bomb *b = bomb_start(&t, p0, (Vec3){d.x / len, d.y / len, d.z / len}, 0, -1, 0);
+        Bomb *b = bomb_start(&t, p0, Vec3{d.x / len, d.y / len, d.z / len}, 0, -1, 0);
         if (b) {
             b->launcher = l->inst;
             audio_fx(14, l->inst, &l->inst->position.x);
         }
         return;
     }
-    shot_spawn(&l->t, p0, (Vec3){d.x / len, d.y / len, d.z / len}, l->inst, NULL, l->target,
+    shot_spawn(&l->t, p0, Vec3{d.x / len, d.y / len, d.z / len}, l->inst, nullptr, l->target,
                shot_sound(l->t.visual)); /* T.target = L->target, T.owner = L */
 }
 /* projectile of a shooting enemy (0x418820 / the ghost 0x414d10): template 1 with the enemy's
@@ -5126,7 +5126,7 @@ void game_enemy_shot(Enemy *owner, Vec3 pos, Vec3 dir, float speed, float damage
     T.vsteer = 0;
     T.aim_h = 0;
     T.visual = visual;
-    shot_spawn(&T, pos, dir, owner->inst, owner, g_player ? g_player->inst : NULL, sound_fx);
+    shot_spawn(&T, pos, dir, owner->inst, owner, g_player ? g_player->inst : nullptr, sound_fx);
 }
 void game_enemy_shot_v(Enemy *owner, Vec3 pos, Vec3 dir, float speed, float damage, float steer,
                        float vsteer, float aim_h, int visual, int sound_fx) {
@@ -5137,14 +5137,14 @@ void game_enemy_shot_v(Enemy *owner, Vec3 pos, Vec3 dir, float speed, float dama
     T.vsteer = vsteer;
     T.aim_h = aim_h;
     T.visual = visual;
-    shot_spawn(&T, pos, dir, owner->inst, owner, g_player ? g_player->inst : NULL, sound_fx);
+    shot_spawn(&T, pos, dir, owner->inst, owner, g_player ? g_player->inst : nullptr, sound_fx);
 }
 static float v3len(Vec3 v) {
     return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 static Vec3 v3scale_to(Vec3 v, float s) {
     float l = v3len(v);
-    return l > 0 ? (Vec3){v.x / l * s, v.y / l * s, v.z / l * s} : v;
+    return l > 0 ? Vec3{v.x / l * s, v.y / l * s, v.z / l * s} : v;
 }
 /* 0x4493c0 without a carried instance: velocity (gravity, damping, seeking with its two clamps),
  * then Move 0x449cc0 */
@@ -5164,7 +5164,7 @@ static void shot_steer(Shot *s, float dt) {
     tp.y += T->aim_h;
     if (s->age < T->t_xz) { /* 0x44952b: xz toward the target, y of the unit vector kept */
         float sp = v3len(s->vel);
-        Vec3 v = sp > 0 ? (Vec3){s->vel.x / sp, s->vel.y / sp, s->vel.z / sp} : s->vel;
+        Vec3 v = sp > 0 ? Vec3{s->vel.x / sp, s->vel.y / sp, s->vel.z / sp} : s->vel;
         float dx = tp.x - s->pos.x, dz = tp.z - s->pos.z, dl = sqrtf(dx * dx + dz * dz);
         if (dl > 0) {
             dx /= dl;
@@ -5186,12 +5186,12 @@ static void shot_steer(Shot *s, float dt) {
         if (reached)
             q.y = tp.y;
         float sp = v3len(s->vel);
-        Vec3 v = v3scale_to((Vec3){q.x - s->pos.x, q.y - s->pos.y, q.z - s->pos.z}, 1.0f);
+        Vec3 v = v3scale_to(Vec3{q.x - s->pos.x, q.y - s->pos.y, q.z - s->pos.z}, 1.0f);
         if (reached) {
             v.y *= 4.0f;
             v = v3scale_to(v, 1.0f);
         } /* 0x4a94c0 */
-        s->vel = (Vec3){v.x * sp, v.y * sp, v.z * sp};
+        s->vel = Vec3{v.x * sp, v.y * sp, v.z * sp};
     }
     if (1.0f + s->vel.y * s->dir0.y < T->lim_y) {
         float sp = v3len(s->vel);
@@ -5237,8 +5237,8 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
             shot_steer(s, dt);
             s->speed = v3len(s->vel);
             if (s->speed > 0)
-                s->dir = (Vec3){s->vel.x / s->speed, s->vel.y / s->speed, s->vel.z / s->speed};
-            b = (Vec3){a.x + s->vel.x * dt, a.y + s->vel.y * dt, a.z + s->vel.z * dt};
+                s->dir = Vec3{s->vel.x / s->speed, s->vel.y / s->speed, s->vel.z / s->speed};
+            b = Vec3{a.x + s->vel.x * dt, a.y + s->vel.y * dt, a.z + s->vel.z * dt};
         }
         if (!end && player_ok &&
             s->T.hits_all) { /* HitActors 0x44a0a0: 0x433920(old, new, r 5, feet, 69, H) = vtbl[24]
@@ -5248,8 +5248,8 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
                     player_kill(pl, 3);
                     enemy_player_killed(s->enemy);
                 }
-                b = (Vec3){a.x + (b.x - a.x) * g_hit_frac, a.y + (b.y - a.y) * g_hit_frac,
-                           a.z + (b.z - a.z) * g_hit_frac};
+                b = Vec3{a.x + (b.x - a.x) * g_hit_frac, a.y + (b.y - a.y) * g_hit_frac,
+                         a.z + (b.z - a.z) * g_hit_frac};
                 end = 1; /* port: the shot ends where the sweep met him */
             }
         }
@@ -5267,10 +5267,10 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
                      * (hit kind 1) and the press nodes of instances (2), the launcher's own
                      * included; kind 3 = the start point lies inside a press node (0x4330c0): the
                      * projectile is gone */
-            const Instance *hi = NULL;
+            const Instance *hi = nullptr;
             Vec3 n, ni;
             float fi;
-            if (inst_point_in_press(gel, &g_ins, NULL, a, &hi)) {
+            if (inst_point_in_press(gel, &g_ins, nullptr, a, &hi)) {
                 end = 1;
                 b = a;
                 if (wenv("WOODY_FXLOG"))
@@ -5278,15 +5278,15 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
                         puts("");
             } else {
                 float f = gel_ray_hit(gel, a, b, &n);
-                if (inst_ray_press(gel, &g_ins, NULL, a, b, &fi, &ni, &hi) && fi < f) {
+                if (inst_ray_press(gel, &g_ins, nullptr, a, b, &fi, &ni, &hi) && fi < f) {
                     f = fi;
                     n = ni;
                 } else
-                    hi = NULL;
+                    hi = nullptr;
                 if (f <= 1.0f) {
                     if (s->T.max_bounce != -1 && s->bounces >= s->T.max_bounce) {
-                        b = (Vec3){a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f,
-                                   a.z + (b.z - a.z) * f};
+                        b = Vec3{a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f,
+                                 a.z + (b.z - a.z) * f};
                         end = 1;
                     } /* 0x449dff */
                     else { /* Bounce 0x449eb0: the end point mirrored in the plane, the speed kept,
@@ -5295,8 +5295,8 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
                         float L = v3len(d), sl = L * f - 0.01f;
                         if (sl < 0)
                             sl = 0;
-                        Vec3 h = L > 1e-6f ? (Vec3){a.x + d.x / L * sl, a.y + d.y / L * sl,
-                                                    a.z + d.z / L * sl}
+                        Vec3 h = L > 1e-6f ? Vec3{a.x + d.x / L * sl, a.y + d.y / L * sl,
+                                                  a.z + d.z / L * sl}
                                            : a;
                         float q =
                             2.0f * ((b.x - (a.x + d.x * f)) * n.x + (b.y - (a.y + d.y * f)) * n.y +
@@ -5306,8 +5306,8 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
                         Vec3 u = {r.x - h.x, r.y - h.y, r.z - h.z};
                         if (v3len(u) > 1e-6f) {
                             s->dir = v3scale_to(u, 1.0f);
-                            s->vel = (Vec3){s->dir.x * s->speed, s->dir.y * s->speed,
-                                            s->dir.z * s->speed};
+                            s->vel =
+                                Vec3{s->dir.x * s->speed, s->dir.y * s->speed, s->dir.z * s->speed};
                         }
                         b = h;
                         s->bounces++;
@@ -5344,7 +5344,7 @@ static void launchers_update(float now, float dt, Player *pl, const GelFile *gel
         if (shot_is_missile(s)) {
             blast_add(b, 400.0f);
             missile_release(s->missile);
-            s->missile = NULL;
+            s->missile = nullptr;
         } else if (s->visual == 3)
             blast_add(a, 400.0f);
         else if (s->visual == 2)
@@ -5426,7 +5426,7 @@ void game_boss_bar(int on, int cur, int max) {
     g_bossbar.max = max;
 } /* 0x4484d0: 0x462470 starts the slide-in */
 void game_explosion(Vec3 p) {
-    fx_explode(1, p, (Vec3){0, 1, 0});
+    fx_explode(1, p, Vec3{0, 1, 0});
     blast_add(p, 1400.0f);
     blast_add(p, 400.0f);
 }
@@ -5437,10 +5437,10 @@ float game_time(void) {
 void game_launcher_start(Instance *in) /* 0x4522b0(1, 1.0, 0) = message 1000 [inst, -1]: one shot on
                                           the next think step */
 {
-    Launcher *l = in ? launcher_of(in) : NULL;
+    Launcher *l = in ? launcher_of(in) : nullptr;
     if (!l)
         return;
-    l->target = NULL;
+    l->target = nullptr;
     l->count = 1;
     l->T = 1.0f;
     l->t0 = g_now + g_dt;
@@ -5536,7 +5536,7 @@ static void game_msg1509(Instance *in, int mode, int x) {
             smoke_attach(in, 1);
             smoke_attach(in, 2);
         } else
-            game_boss_smoke(NULL, -1, 0);
+            game_boss_smoke(nullptr, -1, 0);
     }
     if (wenv("WOODY_FXLOG"))
         printf("  1509 inst %u mode %d x %d (plumes %d on %d%d%d)\n", in->index, mode, x, g_nbplume,
@@ -5585,7 +5585,7 @@ static void boss_fx_draw(float dt) {
             }
             float pos[3] = {g_bsmoke[i].pos.x, g_bsmoke[i].pos.y + 50.0f * u, g_bsmoke[i].pos.z};
             hud_world_spr(14, pos, g_bsmoke[i].size + 50.0f * u + 20.0f, g_bsmoke[i].rot, one,
-                          0.5f - 0.5f * u, 7, NULL, 0);
+                          0.5f - 0.5f * u, 7, nullptr, 0);
         }
 }
 
@@ -5619,7 +5619,7 @@ static void stars_draw(float dt) {
             continue;
         float u = (g_stars[s].age += dt) / 2.5f;
         if (u >= 1 || e->removed || !e->inst->visible) {
-            g_stars[s].e = NULL;
+            g_stars[s].e = nullptr;
             continue;
         }
         Vec3 p0, d;
@@ -5688,7 +5688,7 @@ static void bubbles_draw(const FreeCamera *cam, float dt) {
             continue;
         float u = (b->age += dt) / b->dur;
         if (b->live ? *b->live == 0 : u >= 1) {
-            b->inst = NULL;
+            b->inst = nullptr;
             continue;
         }
         Vec3 T = ins_anim_centre(b->inst); /* inst+0x60: the animated root, it falls with him */
@@ -5771,7 +5771,7 @@ enum FxKind { /* docs/PARTICLES.md, one record callback each */
 static void fx_particle(FxRec *e, float u, float dt);
 static FxRec *fx_new(float life, Vec3 pos, int kind) {
     if (g_nfx >= 2000)
-        return NULL; /* 0x4793e7: a full pool silently drops the effect */
+        return nullptr; /* 0x4793e7: a full pool silently drops the effect */
     FxRec *r = &g_fx[g_nfx++];
     memset(r, 0, sizeof *r);
     r->life = life;
@@ -5782,8 +5782,8 @@ static FxRec *fx_new(float life, Vec3 pos, int kind) {
 AmbFx *game_fx_amb_new(
     void) /* 0x47e050 / 0x47e160 / 0x47e230 / 0x47e310: the same pool, the same full test */
 {
-    FxRec *r = fx_new(1.0f, (Vec3){0, 0, 0}, FX_AMB);
-    return r ? &r->amb : NULL;
+    FxRec *r = fx_new(1.0f, Vec3{0, 0, 0}, FX_AMB);
+    return r ? &r->amb : nullptr;
 }
 static void fx_rotmat(int a0, int a1, int a2,
                       float M[9]) /* 0x46d220; the angles are in 1/512 turn */
@@ -5820,7 +5820,7 @@ static uint8_t *uniq_flag(const Instance *in) {
     while (n < g_nuniq && g_uniq[n] != in)
         n++;
     if (n >= g_nuniq || n >= 32 || g_level < 0 || g_level >= 29)
-        return NULL; /* rec+0x05 holds 32; the original does not check (0x450760) */
+        return nullptr; /* rec+0x05 holds 32; the original does not check (0x450760) */
     return &g_save.chr[g_char].rec[g_level].uniq[n];
 }
 static void uniq_update(void) {
@@ -5837,7 +5837,7 @@ void game_pickup_fx(int n,
     FxRec *e;
     if (n == 0 || n == 1) {
         pos.y += 50.0f;
-        if ((e = fx_new(2.0f, pos, 0)) != NULL)
+        if ((e = fx_new(2.0f, pos, 0)) != nullptr)
             e->shape = n == 0 ? 1 : 0;
     } /* tetrahedron resp. cube */
     else if (n >= 2 && n <= 4)
@@ -5863,7 +5863,7 @@ static float cos512(int i) {
     return cosf(6.2831853f * (i & 511) / 512.0f);
 }
 void game_special_fx(void) {
-    FxRec *e = fx_new(2.5f, (Vec3){0, 0, 0}, 7);
+    FxRec *e = fx_new(2.5f, Vec3{0, 0, 0}, 7);
     if (e)
         e->shape = 0;
 } /* 0x47ab90: no position, the children read the Perso's */
@@ -5874,13 +5874,13 @@ void game_hit_star(Vec3 pt)                 /* 0x4750e0 */
     fx_new(0.1f, pt, 10);
     Vec3 n = {g_fx_eye.x - pt.x, g_fx_eye.y - pt.y, g_fx_eye.z - pt.z};
     float l = sqrtf(n.x * n.x + n.y * n.y + n.z * n.z);
-    n = l > 1e-3f ? (Vec3){n.x / l, n.y / l, n.z / l} : (Vec3){0, 0, 1};
+    n = l > 1e-3f ? Vec3{n.x / l, n.y / l, n.z / l} : Vec3{0, 0, 1};
     Vec3 a = fabsf(n.y) < 0.9f
-                 ? (Vec3){0, 1, 0}
-                 : (Vec3){1, 0, 0}; /* 0x46d320: two unit vectors across the view direction */
+                 ? Vec3{0, 1, 0}
+                 : Vec3{1, 0, 0}; /* 0x46d320: two unit vectors across the view direction */
     Vec3 U = {a.y * n.z - a.z * n.y, a.z * n.x - a.x * n.z, a.x * n.y - a.y * n.x};
     l = sqrtf(U.x * U.x + U.y * U.y + U.z * U.z);
-    U = (Vec3){U.x / l, U.y / l, U.z / l};
+    U = Vec3{U.x / l, U.y / l, U.z / l};
     Vec3 V = {n.y * U.z - n.z * U.y, n.z * U.x - n.x * U.z, n.x * U.y - n.y * U.x};
     for (int j = 0; j < 8; j++) { /* 8 spokes 45 degrees apart, +-17.6 degrees */
         FxRec *s = fx_new(0.4f, pt, 11);
@@ -5891,7 +5891,7 @@ void game_hit_star(Vec3 pt)                 /* 0x4750e0 */
         Vec3 d = {U.x * cos512(a1) + V.x * sin512(a2), U.y * cos512(a1) + V.y * sin512(a2),
                   U.z * cos512(a1) + V.z * sin512(a2)};
         l = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
-        s->dir = l > 1e-5f ? (Vec3){d.x / l, d.y / l, d.z / l} : U;
+        s->dir = l > 1e-5f ? Vec3{d.x / l, d.y / l, d.z / l} : U;
         s->shape = crt_rnd() * 2.0f > 1.0f;
         s->R = crt_rnd() * 20.0f - 5.0f + 25.0f; /* spin; size 20..40 (half diagonal) */
     }
@@ -5968,11 +5968,11 @@ int game_enemy_thinks(const Instance *inst) /* Think 0x42b400 runs for the insta
 {
     return !g_rnd || inst->listed;
 }
-uint32_t game_instance_list(
-    Instance *const **list) /* world+0x64 / +0x60 in list order; 0 = no list (then *list = NULL) */
+uint32_t game_instance_list(Instance *const **list) /* world+0x64 / +0x60 in list order; 0 = no list
+                                                       (then *list = nullptr) */
 {
     if (!g_rnd || !g_rnd->list_on) {
-        *list = NULL;
+        *list = nullptr;
         return 0;
     }
     *list = g_rnd->list;
@@ -5982,17 +5982,17 @@ static Vec3
 drop_pt(const FxRec *e, float wx,
         float wy) /* a drop at fraction wx along its path; the height uses wy (fistp rounds) */
 {
-    return (Vec3){e->pos.x + e->dir.x * e->D * wx,
-                  e->pos.y + sin512((int)lrintf(255.0f * wy)) * e->h * 100.0f,
-                  e->pos.z + e->dir.z * e->D * wx};
+    return Vec3{e->pos.x + e->dir.x * e->D * wx,
+                e->pos.y + sin512((int)lrintf(255.0f * wy)) * e->h * 100.0f,
+                e->pos.z + e->dir.z * e->D * wx};
 }
 static void fx_update(float dt, const float *eye) {
     static const float grey05[3] = {0.5f, 0.5f, 0.5f}, blue[3] = {0.65f, 0.65f, 0.8f},
                        up[3] = {0, 1, 0},
                        one[3] = {1, 1, 1}; /* additive: rgb x alpha, no x2 (docs/SPLASH.md 7) */
     if (eye)
-        g_fx_eye = (Vec3){eye[0], eye[1], eye[2]};
-    Vec3 feet = g_player ? g_player->pos : (Vec3){0, 0, 0};
+        g_fx_eye = Vec3{eye[0], eye[1], eye[2]};
+    Vec3 feet = g_player ? g_player->pos : Vec3{0, 0, 0};
     for (int i = 0; i < g_nfx; i++) { /* 0x470c70 re-reads the bound, so a particle born this frame
                                          also draws this frame */
         FxRec *e = &g_fx[i];
@@ -6025,7 +6025,7 @@ static void fx_update(float dt, const float *eye) {
                         d->pos.x = (crt_rnd() * 20.0f + e->R) * c +
                                    e->pos.x; /* separate jitter per axis, not purely radial */
                         d->pos.z = (crt_rnd() * 20.0f + e->R) * s + e->pos.z;
-                        d->dir = e->R > 0 ? (Vec3){c, 0, s} : (Vec3){0, 0, 0};
+                        d->dir = e->R > 0 ? Vec3{c, 0, s} : Vec3{0, 0, 0};
                         crt_rnd();
                         crt_rnd(); /* +0x24, +0x20: never read */
                         d->h = e->h;
@@ -6063,8 +6063,8 @@ static void fx_update(float dt, const float *eye) {
                             continue;
                         int a = (int)(crt_rnd() * 512.0f), b = (int)(crt_rnd() * 512.0f);
                         s->dir =
-                            (Vec3){400.0f * cos512(a) * cos512(b), 400.0f * sin512(a),
-                                   400.0f * cos512(a) * sin512(b)}; /* a point on a sphere of 400 */
+                            Vec3{400.0f * cos512(a) * cos512(b), 400.0f * sin512(a),
+                                 400.0f * cos512(a) * sin512(b)}; /* a point on a sphere of 400 */
                     }
                 }
                 int w = u >= 0.9f ? 4 : u >= 0.8f ? 2 : u >= 0.7f ? 1 : 0;
@@ -6168,7 +6168,7 @@ static void fx_update(float dt, const float *eye) {
  * original's flags (hud_world_spr). The numbers below are the exe's (docs/PARTICLES.md cites every
  * constant). */
 static Vec3 v3cross(Vec3 a, Vec3 b) {
-    return (Vec3){a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+    return Vec3{a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
 static void fx_axes(Vec3 d, Vec3 *X, Vec3 *Y) /* 0x46d320: rows X, Y of the frame whose Z is d */
 {
@@ -6204,7 +6204,7 @@ static Vec3 fx_plane_u(Vec3 n) /* 0x471ee0, column 0: the first axis of the plan
     float l = sqrtf(n.x * n.x + n.z * n.z);
     if (l <= 0)
         l = 1;
-    return (Vec3){n.z / l, 0, -n.x / l};
+    return Vec3{n.z / l, 0, -n.x / l};
 }
 /* 0x47cba0(pos, ground normal, walk direction, foot, kind) from the walk cycle 0x463f40
  * (docs/FOOTSTEPS.md 1). Kind bit 0 leaves a print in the ground for 15 s (kind 3 = dust, sand,
@@ -6214,7 +6214,7 @@ void game_footstep(Vec3 pos, Vec3 normal, Vec3 dir, int foot, int kind) {
     Vec3 s = v3cross(normal, dir);
     float k = foot ? -15.0f : 15.0f; /* 0x4abd88 / 0x4a9864 */
     if (kind & 1) {
-        FxRec *r = fx_new(15.0f, (Vec3){pos.x + s.x * k, pos.y + 0.1f + s.y * k, pos.z + s.z * k},
+        FxRec *r = fx_new(15.0f, Vec3{pos.x + s.x * k, pos.y + 0.1f + s.y * k, pos.z + s.z * k},
                           FX_STEP_PRINT); /* +0.1 = 0x4a9008 */
         if (r) {
             r->n = normal;
@@ -6264,7 +6264,7 @@ void game_smoke_ring(Vec3 pos, Vec3 normal, int kind, float t0, float life) {
             continue;
         float c = cos512(a), s = sin512(a), q = k_ring[kind].size * 0.25f;
         r->age = t0;
-        r->dir = (Vec3){X.x * c + Y.x * s, X.y * c + Y.y * s, X.z * c + Y.z * s};
+        r->dir = Vec3{X.x * c + Y.x * s, X.y * c + Y.y * s, X.z * c + Y.z * s};
         r->size = crt_rnd() * q * 2.0f - q;
         r->rot = (i * 5000) & 511;
         r->shape = kind;
@@ -6296,7 +6296,7 @@ void game_peck_fx(int kind, Vec3 pos, const Vec3 *n) {
     else if (kind == 0) {
         FxRec *r = fx_new(0.2f, pos, FX_PECK_EMIT);
         if (r)
-            r->n = n ? *n : (Vec3){0, 1, 0};
+            r->n = n ? *n : Vec3{0, 1, 0};
     }
     if (wenv("WOODY_FXLOG"))
         printf("peck kind %d at %.0f %.0f %.0f", kind, pos.x, pos.y, pos.z), puts("");
@@ -6334,12 +6334,12 @@ static void board_frame(Vec3 d, Vec3 *X,
 {
     if (fabsf(d.x) < 0.001f && fabsf(d.z) < 0.001f) {
         float l = sqrtf(d.z * d.z + d.y * d.y);
-        *Y = l > 0 ? (Vec3){0, d.z / l, -d.y / l} : (Vec3){0, 0, 1};
-        *X = (Vec3){Y->y * d.z - Y->z * d.y, Y->z * d.x - Y->x * d.z, Y->x * d.y - Y->y * d.x};
+        *Y = l > 0 ? Vec3{0, d.z / l, -d.y / l} : Vec3{0, 0, 1};
+        *X = Vec3{Y->y * d.z - Y->z * d.y, Y->z * d.x - Y->x * d.z, Y->x * d.y - Y->y * d.x};
     } else {
         float l = sqrtf(d.x * d.x + d.z * d.z);
-        *X = (Vec3){d.z / l, 0, -d.x / l};
-        *Y = (Vec3){d.y * X->z - d.z * X->y, d.z * X->x - d.x * X->z, d.x * X->y - d.y * X->x};
+        *X = Vec3{d.z / l, 0, -d.x / l};
+        *Y = Vec3{d.y * X->z - d.z * X->y, d.z * X->x - d.x * X->z, d.x * X->y - d.y * X->x};
     }
 }
 /* the glows and flames of one type-9 marker of 0x475440 (0x4756e9..0x475b74), shared by the race
@@ -6356,7 +6356,7 @@ static void exhaust_glow_flames(Vec3 P0, Vec3 d, int size_idx, int mode_state, f
     float p[3] = {P0.x, P0.y, P0.z}, nrm[3] = {d.x, d.y, d.z};
     float sz = mode_state == 1 ? s * B : mode_state == 3 ? 2 * B : B;
     hud_world_spr(32, p, sz, 512 - (int)(ph[0] * 512.0f), one,
-                  1.0f - 0.2f * sin512((int)(ph[0] * 256.0f)), 7, NULL, 0); /* camera facing */
+                  1.0f - 0.2f * sin512((int)(ph[0] * 256.0f)), 7, nullptr, 0); /* camera facing */
     sz = mode_state == 1 ? s * C : mode_state == 3 ? 2 * C : C;
     hud_world_spr(32, p, sz, (int)(ph[1] * 512.0f), one,
                   1.0f - 0.2f * sin512((int)(ph[1] * 255.0f)), 6, nrm, 0); /* across the trail */
@@ -6424,7 +6424,7 @@ static void board_fx_draw(float dt) {
         if (!inst_vector_at(e->inst, 9, (uint32_t)i, &P0, &D))
             continue;
         Vec3 d = e->has_prev[i]
-                     ? (Vec3){e->prev[i].x - P0.x, e->prev[i].y - P0.y, e->prev[i].z - P0.z}
+                     ? Vec3{e->prev[i].x - P0.x, e->prev[i].y - P0.y, e->prev[i].z - P0.z}
                      : D;
         e->has_prev[i] = 1;
         float len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
@@ -6437,15 +6437,14 @@ static void board_fx_draw(float dt) {
         for (int k = n - 1; k >= 0;
              k--) { /* the puffs, spread from P0 + 45 d back towards the previous position */
             float f = (float)k / (float)n, dist = f * len + A;
-            FxRec *pf =
-                fx_new(0.2f, (Vec3){P0.x + d.x * dist, P0.y + d.y * dist, P0.z + d.z * dist},
-                       FX_BOARD_PUFF);
+            FxRec *pf = fx_new(0.2f, Vec3{P0.x + d.x * dist, P0.y + d.y * dist, P0.z + d.z * dist},
+                               FX_BOARD_PUFF);
             if (!pf)
                 continue;
             pf->age = k * dt / n;
             pf->rot = (int)(crt_rnd() * 512.0f);
             e->prev[i] = e->size_idx == 9 || e->size_idx == 6
-                             ? (Vec3){P0.x + D.x, P0.y + D.y, P0.z + D.z}
+                             ? Vec3{P0.x + D.x, P0.y + D.y, P0.z + D.z}
                              : pf->pos; /* 0x475c2c */
         }
     }
@@ -6459,7 +6458,7 @@ void game_skeleton(void) {
         return;
     r->R = p->inst->fade;
     r->shape = g_char == 0;
-    r->dir = (Vec3){p->pos.x, p->pos.y + 96.0f, p->pos.z};
+    r->dir = Vec3{p->pos.x, p->pos.y + 96.0f, p->pos.z};
     if (fabsf(g_fx_fwd.x) + fabsf(g_fx_fwd.z) > 1e-4f)
         p->yaw = atan2f(-g_fx_fwd.x, -g_fx_fwd.z);
     if (wenv("WOODY_FXLOG"))
@@ -6480,9 +6479,8 @@ static void fx_particle(FxRec *e, float u, float dt) {
                 continue;
             p->age = crt_rnd() * 0.2f;
             float s = e->foot == 0 ? crt_rnd() * 15.0f + 5.0f : -5.0f - crt_rnd() * 15.0f;
-            p->pos = (Vec3){e->pos.x + A.x * s, e->pos.y + A.y * s, e->pos.z + A.z * s};
-            p->dir =
-                (Vec3){-e->dir.x, -e->dir.y, -e->dir.z}; /* they drift back where he came from */
+            p->pos = Vec3{e->pos.x + A.x * s, e->pos.y + A.y * s, e->pos.z + A.z * s};
+            p->dir = Vec3{-e->dir.x, -e->dir.y, -e->dir.z}; /* they drift back where he came from */
             p->rot = (int)(crt_rnd() * 512.0f);
         }
         break;
@@ -6491,7 +6489,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
         float pos[3] = {e->pos.x + e->dir.x * u * 100.0f,
                         e->pos.y + e->dir.y * u * 100.0f + u * 30.0f,
                         e->pos.z + e->dir.z * u * 100.0f};
-        hud_world_spr(14, pos, u * 15.0f + 20.0f, e->rot, one, (1.0f - u) * 0.1f, 7, NULL, 0);
+        hud_world_spr(14, pos, u * 15.0f + 20.0f, e->rot, one, (1.0f - u) * 0.1f, 7, nullptr, 0);
         break;
     }
     case FX_STEP_PRINT: { /* 0x47c9a0: an oval pressed in (68, additive) with its rim shadow (69) */
@@ -6510,7 +6508,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
               pos[3] = {e->pos.x + e->dir.x * R, e->pos.y + e->dir.y * R, e->pos.z + e->dir.z * R};
         hud_world_spr(
             k_ring[e->shape].img, pos, (u + 1.0f) * k_ring[e->shape].size * 0.5f + e->size, e->rot,
-            one, (1.0f - S) * k_ring[e->shape].alpha, k_ring[e->shape].blend ? 0xf : 7, NULL, 0);
+            one, (1.0f - S) * k_ring[e->shape].alpha, k_ring[e->shape].blend ? 0xf : 7, nullptr, 0);
         break;
     }
     case FX_PECK_EMIT: { /* 0x4798f0: 33 splinters, 50 flashes and 8 holes a second */
@@ -6524,8 +6522,8 @@ static void fx_particle(FxRec *e, float u, float dt) {
             if (!c)
                 continue;
             int a = (int)(crt_rnd() * 511.0f);
-            c->pos = (Vec3){e->pos.x + cos512(a) * 10.0f, e->pos.y, e->pos.z + sin512(a) * 10.0f};
-            c->dir = (Vec3){cos512(a), 0, sin512(a)}; /* level and outward, whatever the wall */
+            c->pos = Vec3{e->pos.x + cos512(a) * 10.0f, e->pos.y, e->pos.z + sin512(a) * 10.0f};
+            c->dir = Vec3{cos512(a), 0, sin512(a)}; /* level and outward, whatever the wall */
             c->rot = (int)(crt_rnd() * 511.0f);
         }
         n = (int)(e->acc2 * 50.0f);
@@ -6538,7 +6536,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
             float hold = crt_rnd() * 0.3f + 5.0f, v = crt_rnd() * 20.0f - 10.0f;
             Vec3 U = fx_plane_u(e->n);
             FxRec *h = fx_new(hold + 4.0f,
-                              (Vec3){e->pos.x + U.x * v, e->pos.y + U.y * v, e->pos.z + U.z * v},
+                              Vec3{e->pos.x + U.x * v, e->pos.y + U.y * v, e->pos.z + U.z * v},
                               FX_PECK_HOLE);
             if (!h)
                 continue;
@@ -6554,14 +6552,15 @@ static void fx_particle(FxRec *e, float u, float dt) {
                         e->pos.z + u * e->dir.z * 80.0f};
         /* the original never sets the rotation here and draws with whatever S+0x224 the previous
          * sprite left; the port takes the chip's own rolled angle (+0x20) */
-        hud_world_spr(25, pos, crt_rnd() * 5.0f + 10.0f, e->rot, one, 1.0f, 0xf, NULL, 0);
+        hud_world_spr(25, pos, crt_rnd() * 5.0f + 10.0f, e->rot, one, 1.0f, 0xf, nullptr, 0);
         break;
     }
     case FX_PECK_FLASH: /* 0x479760 */
-        hud_world_spr(18, &e->pos.x, 80.0f, 0, one, 0.8f, 3, NULL, 0);
+        hud_world_spr(18, &e->pos.x, 80.0f, 0, one, 0.8f, 3, nullptr, 0);
         break;
     case FX_BOARD_PUFF: /* 0x475380: the race board's spray, image 14, flags 7 (additive) */
-        hud_world_spr(14, &e->pos.x, (u + 1.0f) * 15.0f, e->rot, one, 0.3f - 0.3f * u, 7, NULL, 0);
+        hud_world_spr(14, &e->pos.x, (u + 1.0f) * 15.0f, e->rot, one, 0.3f - 0.3f * u, 7, nullptr,
+                      0);
         break;
     case FX_PECK_HOLE: { /* 0x479800: 5 to 5.3 s in the wall, then 4 s to fade */
         float a = e->age < e->D ? 1.0f : 1.0f - (e->age - e->D) * 0.25f;
@@ -6583,21 +6582,21 @@ static void fx_particle(FxRec *e, float u, float dt) {
             float r = crt_rnd() * 150.0f + 20.0f;
             if (u < 0.8f) {
                 d->D = 600.0f;
-                d->dir = (Vec3){cos512(a), sin512(a), cos512(a) * sin512(b)};
+                d->dir = Vec3{cos512(a), sin512(a), cos512(a) * sin512(b)};
             } /* the upper half, not normalised */
             else {
                 d->D = 40.0f;
-                d->dir = (Vec3){0, 1, 0};
+                d->dir = Vec3{0, 1, 0};
             } /* the last fifth only rises */
-            d->pos = (Vec3){e->pos.x + cos512(a) * r, e->pos.y + sin512(a) * r,
-                            e->pos.z + cos512(a) * sin512(b) * r};
+            d->pos = Vec3{e->pos.x + cos512(a) * r, e->pos.y + sin512(a) * r,
+                          e->pos.z + cos512(a) * sin512(b) * r};
         }
         break;
     }
     case FX_DEBRIS: { /* 0x4764f0: D * u * cos(u pi/4) along its direction */
         float s = cos512((int)(u * 64.0f + 128.0f) + 128) * -e->D * u;
         float pos[3] = {e->pos.x + e->dir.x * s, e->pos.y + e->dir.y * s, e->pos.z + e->dir.z * s};
-        hud_world_spr(e->foot, pos, e->size, e->rot, one, (1.0f - u) * 0.2f, 0xf, NULL, 0);
+        hud_world_spr(e->foot, pos, e->size, e->rot, one, (1.0f - u) * 0.2f, 0xf, nullptr, 0);
         break;
     }
     case FX_BURN_EMIT: { /* 0x476b50: 60 burning pieces a second */
@@ -6619,7 +6618,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
             }
             b->dir = d;
             b->pos =
-                (Vec3){e->pos.x + d.x * 300.0f, e->pos.y + d.y * 300.0f, e->pos.z + d.z * 300.0f};
+                Vec3{e->pos.x + d.x * 300.0f, e->pos.y + d.y * 300.0f, e->pos.z + d.z * 300.0f};
         }
         break;
     }
@@ -6664,14 +6663,14 @@ static void fx_particle(FxRec *e, float u, float dt) {
         }
         float t = (e->h + e->acc) * 1200.0f,
               pos[3] = {e->pos.x + e->dir.x * t, e->pos.y + e->dir.y * t, e->pos.z + e->dir.z * t};
-        hud_world_spr(12, pos, 40.0f, 0, grey8, 1.0f, 3, NULL, 0); /* the burning head */
+        hud_world_spr(12, pos, 40.0f, 0, grey8, 1.0f, 3, nullptr, 0); /* the burning head */
         break;
     }
     case FX_TRAIL_SMOKE: /* 0x476f00: white smoke (image 15), alpha blended */
-        hud_world_spr(15, &e->pos.x, e->size, e->rot, one, (1.0f - u) * e->R, 0xf, NULL, 0);
+        hud_world_spr(15, &e->pos.x, e->size, e->rot, one, (1.0f - u) * e->R, 0xf, nullptr, 0);
         break;
     case FX_TRAIL_SPARK: /* 0x476fb0: the fire in it (image 13), additive */
-        hud_world_spr(13, &e->pos.x, e->size, e->rot, one, (1.0f - u) * e->R, 7, NULL, 0);
+        hud_world_spr(13, &e->pos.x, e->size, e->rot, one, (1.0f - u) * e->R, 7, nullptr, 0);
         break;
     case FX_SKELETON: { /* 0x477980: the model and a sprite skeleton take turns, in eighths of 1.5 s
                          */
@@ -6716,10 +6715,10 @@ static void fx_particle(FxRec *e, float u, float dt) {
                                 P.z + X.z * o[0] + Y.z * o[1] + d.z * o[2]};
                 float size = i == 0 ? 120.0f : i == 3 ? 75.0f : 55.0f;
                 int mode = i == 3 ? 0x1a : 0x12, rot = i == 0 ? head : 0;
-                hud_world_spr_mode(mode, img[e->shape][i], pos, size, rot, NULL, 1.0f, 0x4d, NULL,
-                                   mir[row + i]); /* the bone, alpha blended */
-                hud_world_spr_mode(mode, img[e->shape][6 + i], pos, size + jit, rot, NULL, 1.0f,
-                                   0x45, NULL, mir[row + i]); /* its flickering glow, additive */
+                hud_world_spr_mode(mode, img[e->shape][i], pos, size, rot, nullptr, 1.0f, 0x4d,
+                                   nullptr, mir[row + i]); /* the bone, alpha blended */
+                hud_world_spr_mode(mode, img[e->shape][6 + i], pos, size + jit, rot, nullptr, 1.0f,
+                                   0x45, nullptr, mir[row + i]); /* its flickering glow, additive */
             }
         }
         /* 0x477d9d..0x477dc6: 0x498790(kind 0, S+0x208, white, rnd * 100 + 200) every frame, never
@@ -6729,7 +6728,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
         {
             float lp[3];
             hud_last_sprite_pos(lp);
-            rnd_light_add(0, (Vec3){lp[0], lp[1], lp[2]}, white255, crt_rnd() * 100.0f + 200.0f);
+            rnd_light_add(0, Vec3{lp[0], lp[1], lp[2]}, white255, crt_rnd() * 100.0f + 200.0f);
         }
         break;
     }
@@ -6739,7 +6738,7 @@ static void fx_particle(FxRec *e, float u, float dt) {
         pos[0] = e->pos.x + crt_rnd() * u;
         pos[1] = e->pos.y;
         pos[2] = e->pos.z + crt_rnd() * u; /* x (0x47cd4b), then z (0x47cd66) */
-        hud_world_spr(12, pos, (1.0f - u) * e->R, 0, rgb, 1.0f, 3, NULL,
+        hud_world_spr(12, pos, (1.0f - u) * e->R, 0, rgb, 1.0f, 3, nullptr,
                       0); /* image 0x1000c, mode 0x12, flags 3: camera facing, own colour */
         break;
     }
@@ -6890,7 +6889,7 @@ static Rocket *rocket_of(const Instance *in) {
     for (int i = 0; i < g_nrockets; i++)
         if (g_rockets[i].inst == in)
             return &g_rockets[i];
-    return NULL;
+    return nullptr;
 }
 static void rocket_place(Rocket *r) {
     Instance *in = r->inst;
@@ -6917,7 +6916,7 @@ static void rocket_reset(Rocket *r) /* vtbl[17] 0x452ae0 */
     if (r->bomb) {
         if (r->bomb->ridden)
             bomb_reset(r->bomb);
-        r->bomb = NULL;
+        r->bomb = nullptr;
     }
     r->has_prev = 0; /* 0x452baa: only the exhaust's per-marker "has previous" bytes +0x2c[]; its
                       * state (+8) stays, so the next ride burns at full size from mounting on until
@@ -6932,16 +6931,16 @@ static Quat quat_from_axes(Vec3 X, Vec3 Y,
     Quat q;
     if (t > 0) {
         float s = sqrtf(t + 1) * 2;
-        q = (Quat){(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, s * 0.25f};
+        q = Quat{(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, s * 0.25f};
     } else if (m00 > m11 && m00 > m22) {
         float s = sqrtf(1 + m00 - m11 - m22) * 2;
-        q = (Quat){s * 0.25f, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s};
+        q = Quat{s * 0.25f, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s};
     } else if (m11 > m22) {
         float s = sqrtf(1 + m11 - m00 - m22) * 2;
-        q = (Quat){(m01 + m10) / s, s * 0.25f, (m12 + m21) / s, (m02 - m20) / s};
+        q = Quat{(m01 + m10) / s, s * 0.25f, (m12 + m21) / s, (m02 - m20) / s};
     } else {
         float s = sqrtf(1 + m22 - m00 - m11) * 2;
-        q = (Quat){(m02 + m20) / s, (m12 + m21) / s, s * 0.25f, (m10 - m01) / s};
+        q = Quat{(m02 + m20) / s, (m12 + m21) / s, s * 0.25f, (m10 - m01) / s};
     }
     return q;
 }
@@ -6949,7 +6948,7 @@ static Vec3 rocket_aim(const Rocket *r, Vec3 from) {
     Vec3 d = {0, 0, 1};
     if (r->inst->traj.npoints) {
         Vec3 p = r->inst->traj.points[0];
-        d = (Vec3){p.x - from.x, p.y - from.y, p.z - from.z};
+        d = Vec3{p.x - from.x, p.y - from.y, p.z - from.z};
     }
     float l = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
     if (l > 1e-6f) {
@@ -6998,7 +6997,7 @@ static void rockets_update(float dt, Player *pl, int have_player) /* think step 
             Vec3 Z = {-Y.x * k, 1 - Y.y * k, -Y.z * k};
             float l = sqrtf(Z.x * Z.x + Z.y * Z.y + Z.z * Z.z);
             if (l < 1e-5f) {
-                Z = (Vec3){0, 0, 1};
+                Z = Vec3{0, 0, 1};
                 l = 1;
             }
             Z.x /= l;
@@ -7104,7 +7103,7 @@ static void rockets_update(float dt, Player *pl, int have_player) /* think step 
                           pl->inst->position.z - in->position.z};
                 if (d.x * d.x + d.y * d.y + d.z * d.z < 600.0f * 600.0f && !wenv("WOODY_GOD")) {
                     float l = sqrtf(d.x * d.x + d.z * d.z);
-                    Vec3 away = l > 1e-3f ? (Vec3){d.x / l, 0, d.z / l} : (Vec3){0, 0, 1};
+                    Vec3 away = l > 1e-3f ? Vec3{d.x / l, 0, d.z / l} : Vec3{0, 0, 1};
                     player_hit(pl, 0, away);
                     pad_rumble(1.0f, 0.5f);
                     player_kill(pl, 6); /* rumble 0x44d1b0(+0x1d4, +0x1d0) = P+0xc4, P+0xc0 */
@@ -7211,8 +7210,7 @@ static void rockets_draw(float dt) {
                 : (ta > 0.3f && ta < 0.45f) ? (ta - 0.3f) * 6.667f
                 : (ta > 0.85f && ta < 1.0f) ? (ta - 0.85f) * 6.667f
                                             : 0;
-        Vec3 t =
-            r->has_prev ? (Vec3){r->prev_p1.x - m.x, r->prev_p1.y - m.y, r->prev_p1.z - m.z} : d;
+        Vec3 t = r->has_prev ? Vec3{r->prev_p1.x - m.x, r->prev_p1.y - m.y, r->prev_p1.z - m.z} : d;
         r->has_prev = 1; /* 0x475669 */
         float len = sqrtf(t.x * t.x + t.y * t.y + t.z * t.z);
         if (len > 0) {
@@ -7226,13 +7224,13 @@ static void rockets_draw(float dt) {
         }
         for (int k = n - 1; k >= 0; k--) { /* 0x475b7a: also between the ramps */
             float dist = (float)k / (float)n * len + 100.0f;
-            FxRec *pf = fx_new(0.2f, (Vec3){m.x + t.x * dist, m.y + t.y * dist, m.z + t.z * dist},
+            FxRec *pf = fx_new(0.2f, Vec3{m.x + t.x * dist, m.y + t.y * dist, m.z + t.z * dist},
                                FX_BOARD_PUFF);
             if (!pf)
                 continue;
-            pf->age = k * dt / n;                                 /* 0x475bbf */
-            r->prev_p1 = (Vec3){m.x + d.x, m.y + d.y, m.z + d.z}; /* 0x475c58 */
-            pf->rot = (int)(crt_rnd() * 512.0f);                  /* 0x475c79 */
+            pf->age = k * dt / n;                               /* 0x475bbf */
+            r->prev_p1 = Vec3{m.x + d.x, m.y + d.y, m.z + d.z}; /* 0x475c58 */
+            pf->rot = (int)(crt_rnd() * 512.0f);                /* 0x475c79 */
         }
     }
 }
@@ -7242,7 +7240,7 @@ static void rockets_draw(float dt) {
  * built at the start of the frame (0x42a980 -> 0x42a840, with the frustum / race-distance test of
  * stationary instances, docs/INSTANCE.md 4.1) */
 static int snd_owner_active(const void *owner) {
-    const Instance *in = owner;
+    const Instance *in = static_cast<const Instance *>(owner);
     return in->visible && in->listed;
 }
 static uint32_t g_text_var;
@@ -7253,7 +7251,7 @@ static void snd_msg(const EkoMsg *m, Instance *in) {
 #define AI(i) ((i) < (int)m->nargs ? (float)(int32_t)m->args[i] : 0.0f)
     uint32_t s2 = m->nargs ? m->args[0] : 0,
              s3 = m->nargs > 1 ? m->args[1] : 0; /* sample ref of the 2D / 3D forms */
-    const float *pos = in ? &in->position.x : NULL;
+    const float *pos = in ? &in->position.x : nullptr;
     int q =
         (m->id >= 1603 && m->id <= 1605) || (m->id >= 1611 && m->id <= 1615) || m->id == 1617 ||
         (m->id >= 1624 && m->id <= 1626) ||
@@ -7262,41 +7260,41 @@ static void snd_msg(const EkoMsg *m, Instance *in) {
     switch (m->id) {
     case 1600:
     case 1603:
-        audio_play_q(s2, NULL, q, 0, AI(1), 1.0f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 0, AI(1), 1.0f, nullptr, 0, 0);
         break;
     case 1601:
     case 1604:
-        audio_play_q(s2, NULL, q, 0, AI(1), AI(2) * 0.01f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 0, AI(1), AI(2) * 0.01f, nullptr, 0, 0);
         break;
     case 1602:
     case 1605:
-        audio_play_q(s2, NULL, q, 0, AI(1), AI(2) * -0.01f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 0, AI(1), AI(2) * -0.01f, nullptr, 0, 0);
         break;
     case 1606:
     case 1611:
-        audio_play_q(s2, NULL, q, 1, AI(1), 1.0f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 1, AI(1), 1.0f, nullptr, 0, 0);
         break;
     case 1607:
     case 1612:
-        audio_play_q(s2, NULL, q, 1, AI(1), AI(2) * 0.01f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 1, AI(1), AI(2) * 0.01f, nullptr, 0, 0);
         break;
     case 1609:
     case 1614:
-        audio_play_q(s2, NULL, q, 1, AI(1), AI(2) * -0.01f, NULL, 0, 0);
+        audio_play_q(s2, nullptr, q, 1, AI(1), AI(2) * -0.01f, nullptr, 0, 0);
         break;
     case 1608:
     case 1610:
     case 1613:
     case 1615:
-        audio_play_q(s2, NULL, q, 1, AI(1), AI(2) * 0.01f, NULL, 0, AI(3) * 0.01f);
+        audio_play_q(s2, nullptr, q, 1, AI(1), AI(2) * 0.01f, nullptr, 0, AI(3) * 0.01f);
         break;
     case 1616:
     case 1617:
-        audio_play_q(s3, in, q, 0, AI(2), 1.0f, NULL, 0, 0);
+        audio_play_q(s3, in, q, 0, AI(2), 1.0f, nullptr, 0, 0);
         break;
     case 1618:
     case 1619:
-        audio_play_q(s3, in, 1, 0, AI(2), -AI(3), NULL, 0, 0);
+        audio_play_q(s3, in, 1, 0, AI(2), -AI(3), nullptr, 0, 0);
         break; /* 0x46820a: -arg3 without the 0.01, so arg3 = seconds */
     case 1652:
         audio_stop2d(s2, AI(1) * 0.01f, (int)AI(2));
@@ -7439,7 +7437,7 @@ static void anim_sounds(Instance *ii) {
                 if (r >= lo && r < hi) {
                     int perso = g_player && g_player->inst == ii;
                     audio_play(e[2], ii, 0, vol, (float)pitch * 0.01f,
-                               perso ? NULL : &ii->position.x, dmin * 0.01f, 0);
+                               perso ? nullptr : &ii->position.x, dmin * 0.01f, 0);
                 }
             }
         }
@@ -7448,7 +7446,7 @@ static void anim_sounds(Instance *ii) {
 }
 static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
     (void)user;
-    Instance *in = m->nargs ? slot_instance(m->args[0]) : NULL;
+    Instance *in = m->nargs ? slot_instance(m->args[0]) : nullptr;
     if (m->id >= 500 && m->id <= 800 && m->nargs && slot_camera(m->args[0]))
         cam_msg(m, slot_camera(m->args[0]));
     if (m->id == 1200 && in && m->nargs > 1 && m->args[1] == 36 && g_nuniq < 64)
@@ -7605,7 +7603,7 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
     case 1500:
         if (in && m->nargs > 4)
             game_bubble(in, (int32_t)m->args[1], (int32_t)m->args[2] * 0.01f,
-                        (float)(int32_t)m->args[3], (float)(int32_t)m->args[4], NULL);
+                        (float)(int32_t)m->args[3], (float)(int32_t)m->args[4], nullptr);
         break; /* speech bubble 0x46ccc0: [inst, kind, duration cs, offY, offX] (K2R, S2R) */
     case 1501:
     case 1504:
@@ -7623,7 +7621,7 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
         if (in && (in->type == 14 || (m->id == 60 && (in->type == 15 || in->type == 16))) &&
             m->nargs > 1)
             enemies_boss_msg(&g_enemies, in, (int)m->id, m->args[1],
-                             m->id == 59 ? slot_instance(m->args[1]) : NULL);
+                             m->id == 59 ? slot_instance(m->args[1]) : nullptr);
         break;
     case 61:
     case 62: /* classes 15 / 16 (docs/BOSS15_16.md): 61 links 8 instances, 62 a group number and 7
@@ -7710,7 +7708,7 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
                 t.speed = 100.0f;
             } /* 0x42f6b0 poses the dispenser first (vtbl[2](1)) */ else {
                 p0 = in->position;
-                d = (Vec3){0, -1, 0};
+                d = Vec3{0, -1, 0};
                 t.speed = 0;
             }
             if (l > 1e-4f) {
@@ -7838,8 +7836,8 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
                    (m->args[0] & 0xffffff) == 0) { /* 0x44514d: SaveAuto(0) -> the (silent,
                                                       0x462c60) warning "SaveAuto(this)", then */
             g_player->spawn_pos = g_player->pos;
-            g_player->spawn_yaw = g_player->yaw; /* 0x44a920(NULL, 0): +0x318 = +0x1f4, +0x324 = the
-                                                    Mover's facing; no +0x330 / +0x4e0 */
+            g_player->spawn_yaw = g_player->yaw; /* 0x44a920(nullptr, 0): +0x318 = +0x1f4, +0x324 =
+                                                    the Mover's facing; no +0x330 / +0x4e0 */
         }
         break;
     case 1142:
@@ -8129,7 +8127,7 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
                 l->active = 0;
                 l->anim = -1;
                 l->anim_dur = 0;
-                l->target = NULL;
+                l->target = nullptr;
                 l->count = -1;
                 l->T = 0;
             } /* 0x452330: Reset 0x452260 + template a1 (0 = the thrown bomb: no visual, its life is
@@ -8208,7 +8206,7 @@ static void on_msg(EkoVM *vm, const EkoMsg *m, void *user) {
                 float T = m->id == 1000 ? 1.0f : a3 * 0.01f;
                 if (T < 0.2f)
                     T = 0.2f;
-                l->target = tgt == -1 ? NULL : slot_instance((uint32_t)tgt);
+                l->target = tgt == -1 ? nullptr : slot_instance((uint32_t)tgt);
                 l->count = cnt;
                 l->T = T;
                 l->t0 = g_now + g_dt;
@@ -8362,7 +8360,7 @@ static void level_free(Level *L) {
     g_nbombs = 0;
     g_nchests = 0;
     memset(g_bombfx, 0, sizeof g_bombfx);
-    water_reset(NULL);
+    water_reset(nullptr);
     storm_reset();
     g_nfx = 0;
     g_ntorch = 0;
@@ -8370,9 +8368,9 @@ static void level_free(Level *L) {
     hud_anim_reset();
     memset(g_puffs, 0, sizeof g_puffs);
     memset(g_blasts, 0, sizeof g_blasts);
-    g_player = NULL;
-    g_prop = NULL;
-    g_pose = NULL;
+    g_player = nullptr;
+    g_prop = nullptr;
+    g_pose = nullptr;
     g_have_intro = 0;
     memset(&g_res, 0, sizeof g_res);
     g_enemies.n = 0;
@@ -8382,7 +8380,7 @@ static void level_free(Level *L) {
     g_nbplume = 0;
     memset(g_smoke_on, 0, sizeof g_smoke_on);
     memset(g_bsmoke, 0, sizeof g_bsmoke);
-    player_set_carried(NULL, NULL);
+    player_set_carried(nullptr, nullptr);
     g_nretry = 0;
     memset(&g_cam, 0, sizeof g_cam);
     g_cam.mode = 1;
@@ -8464,8 +8462,8 @@ static int level_load(Level *L, const char *dir, const char *lvl) {
 #ifdef WOODY_PSP
     woody_presentation_loading(lvl, "LIGHTING", 0.55f);
 #endif
-    rnd_init(&L->rnd, &L->tex, &L->gel, &g_ins, L->have_lit ? &L->lit : NULL,
-             L->have_vis ? &L->vis : NULL);
+    rnd_init(&L->rnd, &L->tex, &L->gel, &g_ins, L->have_lit ? &L->lit : nullptr,
+             L->have_vis ? &L->vis : nullptr);
     for (int i = 0; i < 50 * 6; i++)
         crt_rand(); /* 0x40456e -> 0x4367f0: [0x4b3200] = 50 records of six rand() / 32767 floats
                      * into [0x54ba28], which nothing reads (only Unload frees it), at every level
@@ -8481,7 +8479,7 @@ static int level_load(Level *L, const char *dir, const char *lvl) {
     snprintf(path, sizeof path, "%s/%s/%s.col", dir, lvl, lvl);
     rnd_load_col(&L->rnd, path); /* 0x4271e0: the objects of every kd leaf (0x42aa0b) */
     L->have_player = player_init(&L->player, &g_ins, &L->gel, &L->tex) == 0;
-    g_player = L->have_player ? &L->player : NULL;
+    g_player = L->have_player ? &L->player : nullptr;
     g_rnd = &L->rnd;
     g_gel = &L->gel;
     for (uint32_t mi = 0; mi < g_ins.nmodels; mi++)
@@ -8533,10 +8531,10 @@ static int level_load(Level *L, const char *dir, const char *lvl) {
     printf("init done: %d messages\n", L->vm.nmsgs);
     for (int i = 0; i < L->vm.nmsgs; i++)
         on_msg(&L->vm, &L->vm.msgs[i],
-               NULL); /* docs/VM.md 2: the exe queues the messages and the game loop only takes the
-                       * queue after the tick, so a variable one of them writes (1082 LevelIsEnable
-                       * for the level-select doors) wakes its object in the first tick instead of
-                       * in an init whose wake lists are cleared at the end */
+               nullptr); /* docs/VM.md 2: the exe queues the messages and the game loop only takes
+                          * the queue after the tick, so a variable one of them writes (1082
+                          * LevelIsEnable for the level-select doors) wakes its object in the first
+                          * tick instead of in an init whose wake lists are cleared at the end */
     eko_msg_reset(&L->vm);
     if (L->have_player) {
         SaveChar *sc = &g_save.chr[g_char];
@@ -8678,13 +8676,13 @@ static void logos_play(Window *w, const char *dir) {
                stop ? ", skipped" : "", r < 0 ? ", bad data" : "");
         hnm_close(&h);
     }
-    rnd_film_frame(w, NULL, 0, 0);
+    rnd_film_frame(w, nullptr, 0, 0);
 }
 
 static void *read_all(const char *path, size_t *sz) {
     FILE *f = fopen(path, "rb");
     if (!f)
-        return NULL;
+        return nullptr;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -8692,7 +8690,7 @@ static void *read_all(const char *path, size_t *sz) {
     if (fread(b, 1, (size_t)n, f) != (size_t)n) {
         fclose(f);
         free(b);
-        return NULL;
+        return nullptr;
     }
     fclose(f);
     *sz = (size_t)n;
@@ -8705,7 +8703,7 @@ static void *read_all(const char *path, size_t *sz) {
 #ifdef _WIN32
 static LONG WINAPI crash_filter(EXCEPTION_POINTERS *e) {
     void *a = e->ExceptionRecord->ExceptionAddress;
-    HMODULE m = NULL;
+    HMODULE m = nullptr;
     char name[MAX_PATH] = "?";
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -8721,7 +8719,7 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS *e) {
            m ? (unsigned long long)((char *)a - (char *)m) : 0ull);
     fflush(stdout);
 #ifdef WOODY_GUI
-    MessageBoxA(NULL,
+    MessageBoxA(nullptr,
                 "WoodyRE has crashed. woodyre.log (next to woodyre.cfg) says where; please attach "
                 "it to a bug report.",
                 "WoodyRE", MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND);
@@ -8739,7 +8737,7 @@ static void crash_signal(int sig) {
 }
 #endif
 
-int main(int argc, char **argv) {
+int woody::run(int argc, const char *const argv[]) {
 #ifdef _WIN32
     SetUnhandledExceptionFilter(crash_filter);
 #elif !defined __ANDROID__ && !defined __SWITCH__
@@ -8750,12 +8748,12 @@ int main(int argc, char **argv) {
     signal(SIGABRT, crash_signal);
 #endif
     if (wenv("WOODY_UNBUF"))
-        setvbuf(stdout, NULL, _IONBF, 0); /* debugging a crash: every line reaches the log */
+        setvbuf(stdout, nullptr, _IONBF, 0); /* debugging a crash: every line reaches the log */
     /* [data dir] [level] [options]: the data dir is a path (it has a / \ or :, or exists); without
      * one data_find() looks for the game files and asks for the CD at the first start
      * (datasetup.h). No level: boot to the title (House, level 0) */
     int ai = 1;
-    const char *dir = NULL, *lvl = "House";
+    const char *dir = nullptr, *lvl = "House";
     if (argc > ai && argv[ai][0] != '-' && (strpbrk(argv[ai], "/\\:") || plat_exists(argv[ai])))
         dir = argv[ai++];
     if (argc > ai && argv[ai][0] != '-')
@@ -8773,11 +8771,11 @@ int main(int argc, char **argv) {
 #endif
 #if defined WOODY_GUI || !defined _WIN32
     g_log_msgs =
-        wenv("WOODY_TRACE") != NULL; /* release builds: the per-message trace (SEND, player t=) only
-                                        on request, hours of play made a 100 MB log */
+        wenv("WOODY_TRACE") != nullptr; /* release builds: the per-message trace (SEND, player t=)
+                                        only on request, hours of play made a 100 MB log */
 #endif
     int verify = 0; /* --verify: check the data against the supported CDs and quit */
-    const char *shot_path = NULL;
+    const char *shot_path = nullptr;
     double shot_after = 0; /* --shot file.ppm seconds: screenshot then quit */
     int have_cam = 0;
     float cam_args[5] = {0, 0, 0, 0, 0}; /* --cam x y z yaw pitch (degrees) */
@@ -8806,7 +8804,7 @@ int main(int argc, char **argv) {
     double door_at = -1; /* --door INST ACT T (testing) */
     int all_done = 0;
     int new_game = 0, logo = -1;
-    const char *next_name = NULL;
+    const char *next_name = nullptr;
     double next_at = 0;
     /* --nologo / --logo: the logo films off / on even for a scripted run */ /* --next LVL T:
                                                                                 change to level
@@ -9032,7 +9030,7 @@ int main(int argc, char **argv) {
     /* camera: start behind Woody (model 0, instance 0) if present */
     FreeCamera cam = {{0, 0, 0}, 0, 0, 70};
     Instance *sel =
-        (g_ins.nmodels && g_ins.models[0].ninstances) ? &g_ins.models[0].instances[0] : NULL;
+        (g_ins.nmodels && g_ins.models[0].ninstances) ? &g_ins.models[0].instances[0] : nullptr;
     if (sel) {
         cam.pos = sel->position;
         cam.pos.y += 120;
@@ -9305,7 +9303,7 @@ int main(int argc, char **argv) {
         if (g_skip)
             g_black_frame = 1;
         if (DBGKEY(VK_TAB) && !tab_prev && sel) { /* next instance with animations */
-            Instance *nxt = NULL;
+            Instance *nxt = nullptr;
             int found = 0;
             for (uint32_t mi = 0; mi < g_ins.nmodels && !nxt; mi++)
                 for (uint32_t k = 0; k < g_ins.models[mi].ninstances; k++) {
@@ -9349,15 +9347,15 @@ int main(int argc, char **argv) {
          * rider (subtypes 4/5) */
         L.rnd.perso = L.have_player
                           ? L.player.inst
-                          : NULL; /* 0x42b380 draws it outside the list, cinematic or not */
+                          : nullptr; /* 0x42b380 draws it outside the list, cinematic or not */
         rnd_instance_list(&L.rnd, &win, &cam,
-                          L.have_player && L.player.race_char ? L.rnd.race : NULL);
+                          L.have_player && L.player.race_char ? L.rnd.race : nullptr);
         static double pf[5];
         static double pfx[4];
         static int pfn;
         static int prof = -1;
         if (prof < 0)
-            prof = wenv("WOODY_PROF") != NULL;
+            prof = wenv("WOODY_PROF") != nullptr;
         double pt0 = prof ? win_time() : 0;
         /* player (provisional controller) + follow camera */
         if (L.have_player && !paused) {
@@ -9512,7 +9510,7 @@ int main(int argc, char **argv) {
                 if (g_pose && !g_cin.state) {
                     L.player.pos = g_pose->position;
                     L.player.yaw = inst_yaw(g_pose);
-                    L.player.vel = (Vec3){0, 0, 0};
+                    L.player.vel = Vec3{0, 0, 0};
                 }
                 /* 0x44e690: outside the cinematic Woody is invisible and plays action 0x49 =
                  * animation 73 at speed 3 (10 s loop), whose camera track is the orbit */
@@ -9621,10 +9619,9 @@ int main(int argc, char **argv) {
                  (L.player.dead_kind == 7 &&
                   !g_cam.death_cam))) { /* 0x41fb50: kind 1 is watched from where he hung (+100),
                                            kind 7 from where the camera is */
-                g_cam.fix_pos =
-                    L.player.dead_kind == 7
-                        ? g_cam.pos
-                        : (Vec3){L.player.pos.x, L.player.pos.y + 100.0f, L.player.pos.z};
+                g_cam.fix_pos = L.player.dead_kind == 7
+                                    ? g_cam.pos
+                                    : Vec3{L.player.pos.x, L.player.pos.y + 100.0f, L.player.pos.z};
                 g_cam.fix_target = L.player.inst;
                 g_cam.fix_f = g_cam.look_off.y;
                 g_cam.speed = 100.0f;
@@ -9707,7 +9704,7 @@ int main(int argc, char **argv) {
             {
                 int n = L.vm.nmsgs;
                 for (int i = 0; i < n; i++)
-                    on_msg(&L.vm, &L.vm.msgs[i], NULL);
+                    on_msg(&L.vm, &L.vm.msgs[i], nullptr);
                 eko_msg_reset(&L.vm);
             }
             {
@@ -9927,6 +9924,10 @@ int main(int argc, char **argv) {
             }
             postfx_end(); /* the 3D picture into the window (resolved, smoothed); the 2D layer stays
                              sharp */
+#ifdef WOODY_PSP
+            if (!g_black_frame && now - t0 >= 2.0)
+                woody_presentation_export_scene(k_levels[g_level]);
+#endif
             if (g_black_frame || (g_sfade.hold && !(g_sfade.rest > 0))) {
                 rnd_fade(0);
                 g_black_frame = 0;
@@ -9973,7 +9974,7 @@ int main(int argc, char **argv) {
                 dm.nargs = 2;
                 dm.args[0] = 0x1000000u | (uint32_t)door_inst;
                 dm.args[1] = (uint32_t)door_act;
-                on_msg(&L.vm, &dm, NULL);
+                on_msg(&L.vm, &dm, nullptr);
                 door_at = -1;
                 printf("  --door: 1040 [inst %d, action %d]", door_inst, door_act), puts("");
             }
@@ -9985,7 +9986,7 @@ int main(int argc, char **argv) {
                     float hw = 240.0f * vw / vh;
                     sc[0] = 320.0f - hw + sc[0] / 640.0f * 2.0f * hw;
                 } /* 0..640 over a wide view -> the HUD's virtual x (port extra) */
-                hud_anim_pickup(g_pick[i].kind, on ? sc : NULL, g_char);
+                hud_anim_pickup(g_pick[i].kind, on ? sc : nullptr, g_char);
             }
             g_npick = 0;
             hud_begin_view(vx, vy, vw,
@@ -10053,7 +10054,7 @@ int main(int argc, char **argv) {
                 }
                 if (counting != ticking) {
                     if (counting)
-                        audio_fx(61, &g_res, NULL);
+                        audio_fx(61, &g_res, nullptr);
                     else
                         audio_fx_stop(61, &g_res, 0);
                     ticking = counting;
@@ -10088,7 +10089,7 @@ int main(int argc, char **argv) {
             if (wenv("WOODY_SIDE") && now - t0 >= 1.0 && !side_done && L.have_player) {
                 side_done = 1;
                 Instance *si =
-                    slot_instance(0x1000000 | (uint32_t)strtol(wenv("WOODY_SIDE"), NULL, 0));
+                    slot_instance(0x1000000 | (uint32_t)strtol(wenv("WOODY_SIDE"), nullptr, 0));
                 if (si)
                     cam_side_start(si, 2);
             }
@@ -10129,7 +10130,7 @@ int main(int argc, char **argv) {
                          d = {B.x - A.x, 0, B.z - A.z};
                     float l = sqrtf(d.x * d.x + d.z * d.z);
                     if (l < 0.01f)
-                        d = (Vec3){1, 0, 0};
+                        d = Vec3{1, 0, 0};
                     else {
                         d.x /= l;
                         d.z /= l;
@@ -10162,7 +10163,7 @@ int main(int argc, char **argv) {
                    sscanf(e, "%f %f %f %f%n", &pa[0], &pa[1], &pa[2], &pa[3], &used) == 4) {
                 if (!(posat_done >> k & 1) && now - t0 >= pa[0]) {
                     posat_done |= 1 << k;
-                    L.player.pos = (Vec3){pa[1], pa[2], pa[3]};
+                    L.player.pos = Vec3{pa[1], pa[2], pa[3]};
                     L.player.floor_y = pa[2] - 1000.0f;
                     L.player.on_ground = 0;
                 }
@@ -10228,7 +10229,7 @@ int main(int argc, char **argv) {
                     e++;
                 if (!(msgat_done >> k & 1) && now - t0 >= T) {
                     msgat_done |= 1 << k;
-                    on_msg(&L.vm, &em, NULL);
+                    on_msg(&L.vm, &em, nullptr);
                 }
                 k++;
             }
@@ -10250,7 +10251,7 @@ int main(int argc, char **argv) {
                     EkoMsg em;
                     memset(&em, 0, sizeof em);
                     em.id = 1020;
-                    on_msg(&L.vm, &em, NULL);
+                    on_msg(&L.vm, &em, nullptr);
                 }
             }
         }
@@ -10267,7 +10268,7 @@ int main(int argc, char **argv) {
                 for (int i = 0; i < g_enemies.n; i++)
                     if (g_enemies.e[i].inst->index == ii) {
                         Enemy *en = &g_enemies.e[i];
-                        en->pos = en->home = en->start = (Vec3){x, y, z};
+                        en->pos = en->home = en->start = Vec3{x, y, z};
                         en->vfall = 0;
                         enemy_place(en);
                         printf("  ENEMYAT %u -> %.0f %.0f %.0f", ii, x, y, z), puts("");
@@ -10282,7 +10283,7 @@ int main(int argc, char **argv) {
                 bt.life = 8.0f;
                 bt.speed = 0;
                 bat_done = 1;
-                bomb_start(&bt, (Vec3){x, y, z}, (Vec3){0, -1, 0}, 0, -1, 0);
+                bomb_start(&bt, Vec3{x, y, z}, Vec3{0, -1, 0}, 0, -1, 0);
             }
         }
         if ((next_name && now - t0 >= next_at && !strcmp(next_name, "END")) ||
@@ -10291,14 +10292,14 @@ int main(int argc, char **argv) {
             EkoMsg em;
             memset(&em, 0, sizeof em);
             em.id = 1083;
-            on_msg(&L.vm, &em, NULL);
+            on_msg(&L.vm, &em, nullptr);
             if (next_name && !strcmp(next_name, "END"))
-                next_name = NULL;
+                next_name = nullptr;
         }
         end_prev = win.keys[VK_END];
         if (next_name && now - t0 >= next_at) {
             request_level(level_index(next_name), 0.5f);
-            next_name = NULL;
+            next_name = nullptr;
         }
         if (g_next_level >= 0) {
             g_switch_fade -= dt / g_fade_len;
@@ -10396,7 +10397,7 @@ int main(int argc, char **argv) {
             t0 = L.t0;
             last = win_time();
             sel = (g_ins.nmodels && g_ins.models[0].ninstances) ? &g_ins.models[0].instances[0]
-                                                                : NULL;
+                                                                : nullptr;
             lvl = L.name;
             continue;
         }
@@ -10447,10 +10448,10 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     (void)hp;
     (void)cmd;
     (void)show;
-    int r = main(__argc, __argv);
+    int r = woody::run(__argc, __argv);
     if (r) {
         fflush(stdout);
-        MessageBoxA(NULL, "WoodyRE could not start the game. Details are in woodyre.log.",
+        MessageBoxA(nullptr, "WoodyRE could not start the game. Details are in woodyre.log.",
                     "WoodyRE", MB_ICONERROR);
     }
     return r;

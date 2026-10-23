@@ -108,7 +108,7 @@ static void *temporary(size_t n) {
     n = (n + 15) & ~(size_t)15;
     if (n > arena_capacity) {
         error = GL_OUT_OF_MEMORY;
-        return NULL;
+        return nullptr;
     }
     if (arena_used + n > arena_capacity) {
         sync_list();
@@ -136,7 +136,7 @@ static void retire(void *p, size_t n) {
 }
 int woody_gu_open(void) {
     arena_capacity = getenv("WOODY_LOW_MEMORY") ? 1024 * 1024 : 2 * 1024 * 1024;
-    arena = memalign(64, arena_capacity);
+    arena = static_cast<unsigned char *>(memalign(64, arena_capacity));
     if (!arena)
         return -1;
     const char *width = getenv("WOODY_RENDER_WIDTH");
@@ -186,7 +186,7 @@ static void upscale(void) {
     if (render_width == 480 || resolved)
         return;
     ensure();
-    unsigned char *vram = sceGeEdramGetAddr();
+    unsigned char *vram = static_cast<unsigned char *>(sceGeEdramGetAddr());
     void *scratch = vram + 512 * 272 * 6;
     sceGuCopyImage(GU_PSM_5650, 0, 0, render_width, render_height, 512,
                    vram + (uintptr_t)draw_buffer, 0, 0, 512, scratch);
@@ -208,12 +208,13 @@ static void upscale(void) {
         unsigned short u, v;
         short x, y, z;
     };
-    struct ScreenVertex *v = temporary(2 * sizeof *v);
+    struct ScreenVertex *v = static_cast<ScreenVertex *>(temporary(2 * sizeof *v));
     if (v) {
-        v[0] = (struct ScreenVertex){0, 0, 0, 0, 0};
-        v[1] = (struct ScreenVertex){render_width, render_height, 480, 272, 0};
+        v[0] = ScreenVertex{0, 0, 0, 0, 0};
+        v[1] = ScreenVertex{static_cast<unsigned short>(render_width),
+                            static_cast<unsigned short>(render_height), 480, 272, 0};
         sceKernelDcacheWritebackRange(v, 2 * sizeof *v);
-        sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, NULL,
+        sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, nullptr,
                        v);
     }
     for (int i = 0; i < GU_MAX_STATUS; i++)
@@ -244,7 +245,7 @@ void woody_gu_close(void) {
     sceGuTerm();
     initialized = 0;
     free(arena);
-    arena = NULL;
+    arena = nullptr;
 }
 void glFinish(void) {
     if (initialized) {
@@ -572,8 +573,8 @@ void glColorPointer(int n, GLenum t, int s, const void *p) {
     pointer(&colour, n, t, s, p);
 }
 static const void *address(Array *a, unsigned i) {
-    return (const unsigned char *)(a->buffer ? buffers[a->buffer].data : NULL) + (uintptr_t)a->ptr +
-           (size_t)i * a->stride;
+    return (const unsigned char *)(a->buffer ? buffers[a->buffer].data : nullptr) +
+           (uintptr_t)a->ptr + (size_t)i * a->stride;
 }
 static void texture_apply(void) {
     if (!tex_dirty || !bound_texture)
@@ -623,7 +624,7 @@ static void draw(GLenum mode, int first, int count, GLenum itype, const void *in
     int indexed = itype != 0;
     const unsigned char *ip =
         bound_index ? (const unsigned char *)buffers[bound_index].data + (uintptr_t)indices
-                    : indices;
+                    : static_cast<const unsigned char *>(indices);
     /* The engine's persistent packed buffers already have exactly GE's layout. */
     if (mode != GL_QUADS && position.buffer && position.stride == 24 && position.size == 3 &&
         position.type == GL_FLOAT && (uintptr_t)position.ptr == 12 && texcoord.on &&
@@ -634,12 +635,12 @@ static void draw(GLenum mode, int first, int count, GLenum itype, const void *in
         sceGuDrawArray(primitive(mode),
                        GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D |
                            (indexed ? GU_INDEX_16BIT : 0),
-                       count, indexed ? ip : NULL,
+                       count, indexed ? ip : nullptr,
                        (const unsigned char *)buffers[position.buffer].data + (size_t)first * 24);
         return;
     }
     int output = mode == GL_QUADS ? (count / 4) * 6 : count;
-    Vertex *v = temporary((size_t)output * sizeof *v);
+    Vertex *v = static_cast<Vertex *>(temporary((size_t)output * sizeof *v));
     if (!v)
         return;
     for (int k = 0; k < output; k++) {
@@ -648,14 +649,14 @@ static void draw(GLenum mode, int first, int count, GLenum itype, const void *in
         i = indexed ? (itype == GL_UNSIGNED_SHORT ? ((const unsigned short *)ip)[i]
                                                   : ((const unsigned *)ip)[i])
                     : i + first;
-        const float *p = address(&position, i);
+        const float *p = static_cast<const float *>(address(&position, i));
         v[k].x = p[0];
         v[k].y = p[1];
         v[k].z = position.size > 2 ? p[2] : 0;
         v[k].u = v[k].v = 0;
         v[k].color = current_colour;
         if (texcoord.on) {
-            const float *uv = address(&texcoord, i);
+            const float *uv = static_cast<const float *>(address(&texcoord, i));
             v[k].u = uv[0];
             v[k].v = uv[1];
         }
@@ -664,7 +665,7 @@ static void draw(GLenum mode, int first, int count, GLenum itype, const void *in
             if (colour.type == GL_UNSIGNED_BYTE)
                 memcpy(&v[k].color, c, 4);
             else {
-                const float *f = c;
+                const float *f = static_cast<const float *>(c);
                 v[k].color = byte(f[0]) | (byte(f[1]) << 8) | (byte(f[2]) << 16) |
                              (byte(colour.size > 3 ? f[3] : 1) << 24);
             }
@@ -673,10 +674,10 @@ static void draw(GLenum mode, int first, int count, GLenum itype, const void *in
     sceKernelDcacheWritebackRange(v, output * sizeof *v);
     sceGuDrawArray(mode == GL_QUADS ? GU_TRIANGLES : primitive(mode),
                    GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, output,
-                   NULL, v);
+                   nullptr, v);
 }
 void glDrawArrays(GLenum mode, int first, int count) {
-    draw(mode, first, count, 0, NULL);
+    draw(mode, first, count, 0, nullptr);
 }
 void glDrawElements(GLenum mode, int count, GLenum type, const void *indices) {
     draw(mode, 0, count, type, indices);
@@ -697,7 +698,7 @@ void glVertex3f(float x, float y, float z) {
         error = GL_OUT_OF_MEMORY;
         return;
     }
-    immediate[immediate_count++] = (Vertex){current_u, current_v, current_colour, x, y, z};
+    immediate[immediate_count++] = Vertex{current_u, current_v, current_colour, x, y, z};
 }
 void glVertex2f(float x, float y) {
     glVertex3f(x, y, 0);
@@ -715,7 +716,7 @@ void glEnd(void) {
     texcoord.on = 1;
     pointer(&colour, 4, GL_UNSIGNED_BYTE, 24, (char *)immediate + 8);
     colour.on = 1;
-    draw(immediate_mode, 0, immediate_count, 0, NULL);
+    draw(immediate_mode, 0, immediate_count, 0, nullptr);
     position = p;
     texcoord = t;
     colour = c;
@@ -764,7 +765,7 @@ void glColorTableEXT(GLenum target, GLenum internal, int width, GLenum format, G
     (void)format;
     (void)type;
     Texture *t = &textures[bound_texture];
-    unsigned *p = memalign(16, 1024);
+    unsigned *p = static_cast<unsigned int *>(memalign(16, 1024));
     if (!p) {
         error = GL_OUT_OF_MEMORY;
         return;
@@ -797,7 +798,7 @@ void glTexImage2D(GLenum target, int level, int internal, int w, int h, int bord
     }
     int indexed = format == GL_COLOR_INDEX8_EXT;
     int bpp = indexed ? 1 : 4, stride = w < 16 / bpp ? 16 / bpp : w;
-    unsigned char *p = memalign(16, (size_t)stride * h * bpp);
+    unsigned char *p = static_cast<unsigned char *>(memalign(16, (size_t)stride * h * bpp));
     if (!p) {
         error = GL_OUT_OF_MEMORY;
         return;
@@ -823,7 +824,7 @@ void glTexImage2D(GLenum target, int level, int internal, int w, int h, int bord
     sceKernelDcacheWritebackRange(p, (size_t)stride * h * bpp);
     Image *im = &t->image[level];
     retire(im->data, (size_t)im->stride * im->h * bpp);
-    *im = (Image){p, w, h, stride};
+    *im = Image{p, w, h, stride};
     t->format = indexed ? GU_PSM_T8 : GU_PSM_8888;
     if (level > t->levels)
         t->levels = level;
@@ -927,7 +928,7 @@ void glReadPixels(int x, int y, int w, int h, GLenum format, GLenum type, void *
     }
     /* GE transfer also forces framebuffer readback in PPSSPP. Scalar CPU
      * reads of VRAM can otherwise return its stale backing memory there. */
-    unsigned short *copy = memalign(16, (size_t)w * h * 2);
+    unsigned short *copy = static_cast<short unsigned int *>(memalign(16, (size_t)w * h * 2));
     if (!copy) {
         error = GL_OUT_OF_MEMORY;
         return;
@@ -935,7 +936,7 @@ void glReadPixels(int x, int y, int w, int h, GLenum format, GLenum type, void *
     sceKernelDcacheWritebackInvalidateRange(copy, w * h * 2);
     sceGuCopyImage(GU_PSM_5650, x, 272 - y - h, w, h, 512, (void *)fb, 0, 0, w, copy);
     glFinish();
-    unsigned short *d = data;
+    unsigned short *d = static_cast<short unsigned int *>(data);
     for (int row = 0; row < h; row++)
         memcpy(d + row * w, copy + (h - 1 - row) * w, w * 2);
     free(copy);

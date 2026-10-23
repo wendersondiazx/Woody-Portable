@@ -9,6 +9,7 @@
 #include "instance.h"
 #include "pad.h"
 #include "crtrand.h"
+#include "animation_clock.hpp"
 
 /* Rumble 0x44d1b0(a, b): [0x5e618c]->vt[2](a, b), skipped in Perso state 2 (dead). The original's
  * joystick method is an empty `ret 8` (docs/MENU_OPTIONS.md 5.2); the port gives it to the pads of
@@ -228,7 +229,7 @@ static int press_normal(const Instance *in, const InsPoly *ip, Vec3 *out) {
         if (l > 0.01f && (!ok || l > best)) {
             best = l;
             ok = 1;
-            nl = (Vec3){n.x / l, n.y / l, n.z / l};
+            nl = Vec3{n.x / l, n.y / l, n.z / l};
         }
     }
     if (!ok)
@@ -239,7 +240,7 @@ static int press_normal(const Instance *in, const InsPoly *ip, Vec3 *out) {
     float l = sqrtf(vdot(w, w));
     if (!(l > 0))
         return 0;
-    *out = (Vec3){w.x / l, w.y / l, w.z / l};
+    *out = Vec3{w.x / l, w.y / l, w.z / l};
     return 1;
 }
 /* Floor provided by the press nodes (kind 1) of visible instances (inst->vt[7] = 0x432480 walks
@@ -266,8 +267,8 @@ static int ins_floor_below(const GelFile *g, const InsFile *ins, Vec3 p, float *
                            const InsNode **hit_node) {
     int won = 0;
     Vec3 v[32];
-    *hit_inst = NULL;
-    *hit_node = NULL;
+    *hit_inst = nullptr;
+    *hit_node = nullptr;
     const GelColRef *cr;
     uint32_t ncr = gel_col_instances(g, ins, &cr);
     for (uint32_t q = 0; q < ncr; q++) {
@@ -311,7 +312,7 @@ static int ins_floor_below(const GelFile *g, const InsFile *ins, Vec3 p, float *
                         continue;
                     Vec3 nw;
                     if (!press_normal(in, pl, &nw))
-                        nw = (Vec3){P[0], P[1], P[2]};
+                        nw = Vec3{P[0], P[1], P[2]};
                     *best_dist = t;
                     won = 1;
                     *hit_inst = in;
@@ -473,7 +474,7 @@ static Vec3 body_push(const Player *p, Vec3 c, float r, float up, float down, in
             continue;
         for (uint32_t t = 0; t < pl->nverts; t++) {
             const GelVert *gv = &g->verts[pl->indices[t]];
-            v[t] = (Vec3){gv->x, gv->y, gv->z};
+            v[t] = Vec3{gv->x, gv->y, gv->z};
         }
         any |= cyl_poly(v, pl->nverts, pl->plane, c, r, up, down, acc);
     }
@@ -550,7 +551,7 @@ static Vec3 body_push(const Player *p, Vec3 c, float r, float up, float down, in
                     puts("");
         }
     }
-    return (Vec3){acc[0] + acc[1], 0, acc[2] + acc[3]};
+    return Vec3{acc[0] + acc[1], 0, acc[2] + acc[3]};
 }
 
 /* Actor pushing 0x4627d0: for every other actor of the previous frame's list 0x4c5258
@@ -719,7 +720,7 @@ Vec3 player_sphere_push(const Player *p, const Instance *skip, Vec3 c, float r) 
             continue;
         for (uint32_t t = 0; t < pl->nverts; t++) {
             const GelVert *gv = &g->verts[pl->indices[t]];
-            v[t] = (Vec3){gv->x, gv->y, gv->z};
+            v[t] = Vec3{gv->x, gv->y, gv->z};
         }
         if (sphere_poly(v, pl->nverts, pl->plane, c, r, -1.0f, 0, 7, acc))
             g_sphere_contact = 3;
@@ -771,11 +772,11 @@ Vec3 player_sphere_push(const Player *p, const Instance *skip, Vec3 c, float r) 
             }
         }
     }
-    return (Vec3){acc[0] + acc[3], acc[1] + acc[4], acc[2] + acc[5]};
+    return Vec3{acc[0] + acc[3], acc[1] + acc[4], acc[2] + acc[5]};
 }
 
 /* GetHeight 0x435650 -> 0x498520: nearest surface below the point: world polygons with n.y > 1e-5
- * (any slope) that contain the point in xz, and the press nodes of instances (hit_node != NULL
+ * (any slope) that contain the point in xz, and the press nodes of instances (hit_node != nullptr
  * then). */
 static const Instance
     *g_ground_skip; /* set by player_ground_query(): instance to ignore instead of the player */
@@ -800,7 +801,7 @@ static float world_ground(const Player *p, Vec3 pt, int *found, const Instance *
         if (poly_contains(g, pl, q)) {
             best = dist / pl->plane[1];
             f1 = 1;
-            gn = (Vec3){pl->plane[0], pl->plane[1], pl->plane[2]};
+            gn = Vec3{pl->plane[0], pl->plane[1], pl->plane[2]};
             gm = (int32_t)pl->material;
         }
     }
@@ -834,10 +835,10 @@ static float world_ground(const Player *p, Vec3 pt, int *found, const Instance *
         g_ground_mat = -1;
         return pt.y - bi;
     }
-    *hit_inst = NULL;
-    *hit_node = NULL;
+    *hit_inst = nullptr;
+    *hit_node = nullptr;
     *found = f1;
-    g_ground_n = f1 ? gn : (Vec3){0, 1, 0};
+    g_ground_n = f1 ? gn : Vec3{0, 1, 0};
     g_ground_mat = f1 ? gm : -1;
     return f1 ? y1 : pt.y;
 }
@@ -852,9 +853,9 @@ static uint32_t hit_collision(const Instance *hi, const InsNode *hn) {
     uint32_t k = hm->nvolume_nodes + hn->sub_index;
     return hm->ncollision_ids && k < hi->nids ? hi->ids[k] : 0xffffffffu;
 }
-/* GetHeight for another actor (skip = its own instance). col (may be NULL) = the world_collision it
- * stands over, for the generic probe 0x436dc0 of enemies and bombs; n (may be NULL) = the floor
- * normal ([0x4b3108..], GetHeight 0x435650: (0, 1, 0) and y = pt.y when nothing is found) */
+/* GetHeight for another actor (skip = its own instance). col (may be nullptr) = the world_collision
+ * it stands over, for the generic probe 0x436dc0 of enemies and bombs; n (may be nullptr) = the
+ * floor normal ([0x4b3108..], GetHeight 0x435650: (0, 1, 0) and y = pt.y when nothing is found) */
 static float ground_query_full(const Player *p, const Instance *skip, Vec3 pt, int *found,
                                uint32_t *col, Vec3 *n) {
     const Instance *hi;
@@ -862,10 +863,10 @@ static float ground_query_full(const Player *p, const Instance *skip, Vec3 pt, i
     Vec3 keep = g_ground_n;
     int32_t keep_mat = g_ground_mat;
     g_ground_skip = skip;
-    g_skip_self = skip ? p->inst : NULL;
+    g_skip_self = skip ? p->inst : nullptr;
     float y = world_ground(p, pt, found, &hi, &hn);
-    g_ground_skip = NULL;
-    g_skip_self = NULL;
+    g_ground_skip = nullptr;
+    g_skip_self = nullptr;
     if (n)
         *n = g_ground_n;
     g_ground_n = keep;
@@ -876,33 +877,33 @@ static float ground_query_full(const Player *p, const Instance *skip, Vec3 pt, i
 }
 float player_ground_query_col(const Player *p, const Instance *skip, Vec3 pt, int *found,
                               uint32_t *col) {
-    return ground_query_full(p, skip, pt, found, col, NULL);
+    return ground_query_full(p, skip, pt, found, col, nullptr);
 }
 float player_ground_query_n(const Player *p, const Instance *skip, Vec3 pt, int *found, Vec3 *n) {
-    return ground_query_full(p, skip, pt, found, NULL, n);
+    return ground_query_full(p, skip, pt, found, nullptr, n);
 }
 float player_ground_query(const Player *p, const Instance *skip, Vec3 pt, int *found) {
-    return ground_query_full(p, skip, pt, found, NULL, NULL);
+    return ground_query_full(p, skip, pt, found, nullptr, nullptr);
 }
 /* the same GetHeight with its hit type 2 ([0x53a554] == 2): the instance [0x53a560] and the press
  * node [0x53a58c] under pt, for the platform attach 0x436d80 of the probe 0x436dc0 (enemies); *hi =
- * NULL for a world floor or nothing */
+ * nullptr for a world floor or nothing */
 float player_ground_query_hit(const Player *p, const Instance *skip, Vec3 pt, int *found,
                               uint32_t *col, const Instance **hi, uint32_t *node) {
     const InsNode *hn;
     Vec3 keep = g_ground_n;
     int32_t keep_mat = g_ground_mat;
     g_ground_skip = skip;
-    g_skip_self = skip ? p->inst : NULL;
+    g_skip_self = skip ? p->inst : nullptr;
     float y = world_ground(p, pt, found, hi, &hn);
-    g_ground_skip = NULL;
-    g_skip_self = NULL;
+    g_ground_skip = nullptr;
+    g_skip_self = nullptr;
     g_ground_n = keep;
     g_ground_mat = keep_mat;
     if (col)
         *col = *found ? hit_collision(*hi, hn) : 0xffffffffu;
     if (!*found || !*hi || !hn) {
-        *hi = NULL;
+        *hi = nullptr;
         *node = 0;
     } else
         *node = (uint32_t)(hn - (*hi)->model->nodes);
@@ -939,7 +940,7 @@ int player_landing_ring(Player *p, float dt, Vec3 *pos, Vec3 *normal, float *alp
         p->ring_a = 0;
         return 0;
     } /* 0x44b185: below 0 it is reset and nothing is drawn */
-    *pos = (Vec3){p->pos.x, p->floor_y + 1.0f, p->pos.z}; /* P+0x1f4, P+0x224 + 1.0, P+0x1fc */
+    *pos = Vec3{p->pos.x, p->floor_y + 1.0f, p->pos.z}; /* P+0x1f4, P+0x224 + 1.0, P+0x1fc */
     if (normal)
         *normal =
             p->race_floor_n; /* P+0x458 = Mover+0xd0, the floor query's normal (docs/RACE.md 1) */
@@ -1002,13 +1003,13 @@ static Vec3 attach_delta(Player *p) {
     Vec3 nw = mat4_apply(&p->att_inst->node_world[p->att_node], p->att_local);
     d = vsub(nw, p->att_world);
     if (vdot(d, d) > 200.0f * 200.0f) {
-        d = (Vec3){0, 0, 0};
-        p->att_inst = NULL;
+        d = Vec3{0, 0, 0};
+        p->att_inst = nullptr;
     } /* teleporting platform: let go */
     return d;
 }
 static void attach_store(Player *p, const Instance *inst, const InsNode *node, Vec3 contact) {
-    p->att_inst = NULL;
+    p->att_inst = nullptr;
     if (!inst || !node || !inst->node_world)
         return;
     uint32_t ni = (uint32_t)(node - inst->model->nodes);
@@ -1021,8 +1022,8 @@ static void attach_store(Player *p, const Instance *inst, const InsNode *node, V
 static void slide_reset(
     Player *p) /* Mover_SetDir 0x459ff0: 0x467110 on RampB, M+0xd0 = up (0x45a110), M+0xdc = 0 */
 {
-    p->ground_n = (Vec3){0, 1, 0};
-    p->slide_dir = (Vec3){0, 0, 0};
+    p->ground_n = Vec3{0, 1, 0};
+    p->slide_dir = Vec3{0, 0, 0};
     p->slide_speed = p->slide_target = p->slide_t1 = p->slide_t2 = 0;
     p->slide_phase = 0;
     p->sliding = 0;
@@ -1168,12 +1169,12 @@ static void air_move_start(Player *p, const PlayerInput *in) {
     p->am_on = 1;
     p->am_used = 1;
     if (p->subtype == 3) { /* 0x465ee3: M+0x10, normalised when longer than 0 */
-        p->am_dir = (Vec3){sinf(p->yaw), 0, cosf(p->yaw)};
+        p->am_dir = Vec3{sinf(p->yaw), 0, cosf(p->yaw)};
         p->am_t = 0;
         p->am_dur = 0.15f;
         p->am_speed = 3000.0f;
     } else if (p->subtype == 2) { /* 0x465f8b */
-        p->am_dir = (Vec3){0, 1, 0};
+        p->am_dir = Vec3{0, 1, 0};
         p->am_t = 0;
         p->am_dur = 0.25f;
         p->am_speed = 1200.0f;
@@ -1181,7 +1182,7 @@ static void air_move_start(Player *p, const PlayerInput *in) {
         p->am_on = 0;
         return;
     } /* 0x465fcf */
-    audio_fx(0x3a, NULL, NULL);
+    audio_fx(0x3a, nullptr, nullptr);
     if (wenv("WOODY_JUMPLOG"))
         printf("  AIR MOVE %s (jumper %d t %.3f, %.0f above the floor, anim %d)\n",
                p->subtype == 3 ? "dash" : "double jump", p->jumper.state, p->jumper.t,
@@ -1217,7 +1218,7 @@ static int air_move_tick(Player *p, float dt, Vec3 *disp) {
         p->am_dir.y /= l;
         p->am_dir.z /= l;
     }
-    p->am_dir = (Vec3){p->am_dir.x * k, p->am_dir.y * k, p->am_dir.z * k};
+    p->am_dir = Vec3{p->am_dir.x * k, p->am_dir.y * k, p->am_dir.z * k};
     *disp = p->am_dir;
     return 1;
 }
@@ -1274,7 +1275,7 @@ void player_bind(Player *p, Instance *inst) {
     /* facing from the instance quaternion: rotation about y composed with the -90 deg x model
      * rotation */
     ins_pose(inst, 0, 0);
-    Vec3 fwd = mat4_apply(&inst->world, (Vec3){0, -1, 0});
+    Vec3 fwd = mat4_apply(&inst->world, Vec3{0, -1, 0});
     fwd = vsub(fwd, inst->position);
     p->yaw = atan2f(fwd.x, fwd.z);
     p->spawn_pos = p->start_pos = p->pos;
@@ -1314,7 +1315,7 @@ int player_init(Player *p, InsFile *ins, const GelFile *gel, const TexFile *tex)
     p->cur_col = 0xffffffffu;
     p->step_u = -1.0f;
     p->crush = 1.0f;
-    p->ground_n = (Vec3){0, 1, 0};
+    p->ground_n = Vec3{0, 1, 0};
     player_bind(p, &ins->models[0].instances[0]);
     p->jumper.state = 2;
     p->jumper.armed = 1; /* 0x462c90 reset */
@@ -1386,8 +1387,8 @@ float gel_ray_hit(const GelFile *g, Vec3 a, Vec3 b, Vec3 *n_out) {
             continue;
         best = t;
         if (n_out) {
-            *n_out = (Vec3){pl->plane[0], pl->plane[1],
-                            pl->plane[2]}; /* towards the side the ray came from */
+            *n_out = Vec3{pl->plane[0], pl->plane[1],
+                          pl->plane[2]}; /* towards the side the ray came from */
             if (da < 0) {
                 n_out->x = -n_out->x;
                 n_out->y = -n_out->y;
@@ -1398,7 +1399,7 @@ float gel_ray_hit(const GelFile *g, Vec3 a, Vec3 b, Vec3 *n_out) {
     return best;
 }
 float gel_ray_frac(const GelFile *g, Vec3 a, Vec3 b) {
-    return gel_ray_hit(g, a, b, NULL);
+    return gel_ray_hit(g, a, b, nullptr);
 }
 
 /* the endless ray 0x497a30(a, dir, -1) (docs/OBSTACLE.md 1): the world part 0x497b10 walks the
@@ -1613,26 +1614,8 @@ static float anim_len(const Player *p, int n, int k) /* 0x436b90 AnimLen(n, k) *
  * Woody stood up for a frame between going down (.ins 24) and lying (25), and crouched for one at
  * the end of getting up (23). */
 static void ctl_chain(Instance *wi, int n, int *lsub) {
-    const LogAnim *a = log_anim(n);
-    const Model *m = wi->model;
-    if (n < 0)
-        return;
-    int nx = *lsub < 3 ? a->sub[*lsub + 1] : 0;
-    if ((uint32_t)wi->anim < m->nanims && *lsub < 3 &&
-        (nx < 0 || (uint32_t)nx >= m->nanims)) { /* hold the last frame: the clock advances after
-                                                    this, so stop it just before the end */
-        if (wi->anim_time >= m->anims[wi->anim].duration_s - 0.15f) {
-            wi->anim_time = m->anims[wi->anim].duration_s * 0.999f;
-            wi->anim_speed = 0;
-        }
-    } else if ((uint32_t)wi->anim < m->nanims && wi->anim_time >= m->anims[wi->anim].duration_s &&
-               *lsub < 3) {
-        {
-            wi->anim_time -= m->anims[wi->anim].duration_s;
-            wi->anim = nx;
-            (*lsub)++;
-        }
-    }
+    if (n >= 0)
+        woody::advance_animation_chain(*wi, log_anim(n)->sub, *lsub);
 }
 /* one anim controller (class 0x4ab7b4) on one instance: the rider's +0x494 or the race board's
  * +0x498 */
@@ -1640,6 +1623,9 @@ static void ctl_request(Instance *wi, int *lanim, int *lsub, int n, float rate, 
     const LogAnim *a = log_anim(n);
     const Model *m = wi->model;
     if (n != *lanim) {
+        // A new chain may share the current loop (charge -> peck recovery).
+        // Keep its phase, not the accumulated time from every previous loop.
+        woody::wrap_animation_clock(*wi);
         if (wenv("WOODY_ANIMLOG")) {
             if (log)
                 printf("  lanim %d -> %d (jumper %d t %.3f)\n", *lanim, n, log->jumper.state,
@@ -1666,7 +1652,7 @@ static void anim_request(Player *p, int n, float rate) {
  * jump or crouch; B->Reset() = board_lanim -1. Ticked every frame (0x463e60). */
 static void board_request(Player *p, int n) {
     if (p->board && p->board != p->inst)
-        ctl_request(p->board, &p->board_lanim, &p->board_lanim_sub, n, 1.0f, NULL);
+        ctl_request(p->board, &p->board_lanim, &p->board_lanim_sub, n, 1.0f, nullptr);
 }
 /* the slot step of the instance clock 0x43eee0 (0x43f0c9: past the end of slot0 it moves slot1..3
  * up) for the instance `in` just clocked, so the event scan 0x42f5e0 that follows sees the new part
@@ -1754,13 +1740,13 @@ typedef struct {
 static int ray_instances(const Player *p, const Instance *skip, Vec3 a, Vec3 b, float t_world,
                          InsRayHit *h);
 /* 0x464e00(p, inst): may he hang in this wall? inst = the hit instance when the polygon is
- * peckable, else NULL. No new grab while the let-go timer +0x524 runs or when dead (+0x26c); the
+ * peckable, else nullptr. No new grab while the let-go timer +0x524 runs or when dead (+0x26c); the
  * wall must be (nearly) vertical, |n.y| <= 0.05 (0x4ab7d0) */
 static int climb_grab(Player *p, Vec3 n, const Instance *inst) {
     if (p->regrab > 0 || p->dead_kind || !inst || fabsf(n.y) > 0.05f)
         return 0;
     float l = sqrtf(n.x * n.x + n.z * n.z);
-    p->wall_n = l > 0 ? (Vec3){n.x / l, 0, n.z / l} : (Vec3){n.x, 0, n.z};
+    p->wall_n = l > 0 ? Vec3{n.x / l, 0, n.z / l} : Vec3{n.x, 0, n.z};
     p->wall_inst = inst; /* +0x510..0x518, +0x51c */
     return 1;
 }
@@ -1777,30 +1763,30 @@ static int attack_probe(Player *p, Vec3 v) /* 0x4575b0 */
     Vec3 a = {p->pos.x, p->pos.y + 5.0f, p->pos.z}, b = {a.x + v.x, a.y + v.y, a.z + v.z}, face_n;
     float f = gel_ray_hit(p->gel, a, b, &face_n);
     InsRayHit h;
-    int k = ray_instances(p, NULL, a, b, f <= 1.0f ? f : 2.0f, &h);
+    int k = ray_instances(p, nullptr, a, b, f <= 1.0f ? f : 2.0f, &h);
     if (k) {
         f = h.t;
         face_n = h.n;
         if (k == 3) {
             float l = sqrtf(vdot(v, v));
-            face_n = l > 1e-6f ? (Vec3){-v.x / l, -v.y / l, -v.z / l} : (Vec3){0, 1, 0};
+            face_n = l > 1e-6f ? Vec3{-v.x / l, -v.y / l, -v.z / l} : Vec3{0, 1, 0};
         }
     }
     if (f > 1.0f)
         return 0;
     /* 0x4575b0 fires the impact on ANY hit: kind 1, no normal, a 0.05 s flash (docs/PARTICLES.md 4)
      */
-    game_peck_fx(1, (Vec3){a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f},
+    game_peck_fx(1, Vec3{a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f},
                  &face_n);
     if (climb_grab(p, face_n,
-                   k == 2 && h.node->type_code == 4 ? h.in : NULL)) { /* 0x4576a0..0x4576e8 */
+                   k == 2 && h.node->type_code == 4 ? h.in : nullptr)) { /* 0x4576a0..0x4576e8 */
         p->atk = 8;
         p->atk_t = anim_len(p, 0xf, 0);
         lock_move(p, p->atk_t); /* 0x4576ee..0x457726 */
         p->yaw = atan2f(-p->wall_n.x, -p->wall_n.z);
         p->speed = 0;
         p->ramp_phase = 0;
-        p->vel = (Vec3){0, 0, 0}; /* RampA.dir = M.velDir = M.dir = -n */
+        p->vel = Vec3{0, 0, 0}; /* RampA.dir = M.velDir = M.dir = -n */
         rumble(p, 0.5f, 0.5f);
         printf("  CLIMB beak in instance %u (substate 8)\n", h.in->index);
         return 1;
@@ -1808,7 +1794,7 @@ static int attack_probe(Player *p, Vec3 v) /* 0x4575b0 */
     int found;
     const Instance *hi;
     const InsNode *hn;
-    float gy = world_ground(p, (Vec3){p->pos.x, p->pos.y + 1.0f, p->pos.z}, &found, &hi, &hn);
+    float gy = world_ground(p, Vec3{p->pos.x, p->pos.y + 1.0f, p->pos.z}, &found, &hi, &hn);
     int n = (found && p->pos.y - gy > 100.0f) ? 0xe : 0xd;
     p->atk = n == 0xe ? 7 : 6;
     p->atk_t = anim_len(p, n, 0);
@@ -1829,11 +1815,11 @@ static Enemy *enemy_of(const Player *p, const Instance *in) {
     for (int i = 0; i < p->enemies->n; i++)
         if (p->enemies->e[i].inst == in)
             return &p->enemies->e[i];
-    return NULL;
+    return nullptr;
 }
 static Enemy *nearest_enemy(Player *p, float r) {
     if (!p->enemies)
-        return NULL;
+        return nullptr;
     Instance *const *list;
     uint32_t nl = game_instance_list(&list);
     Enemy *c[16];
@@ -1874,7 +1860,7 @@ static Enemy *nearest_enemy(Player *p, float r) {
                 c[j] = c[j + 1];
                 c[j + 1] = q;
             }
-    return n ? c[0] : NULL;
+    return n ? c[0] : nullptr;
 }
 static void auto_aim(Player *p) /* 0x4579a0: the charge run steers to the nearest enemy */
 {
@@ -1922,8 +1908,8 @@ static void attack_hit_loop(Player *p) {
         Vec3 d = vsub(bb, ba);
         float l = sqrtf(vdot(d, d));
         if (l > 0)
-            d = (Vec3){d.x / l, d.y / l, d.z / l}; /* 0x4588af..0x458987 */
-        bb = (Vec3){ba.x + d.x * 50.0f, ba.y + d.y * 50.0f, ba.z + d.z * 50.0f};
+            d = Vec3{d.x / l, d.y / l, d.z / l}; /* 0x4588af..0x458987 */
+        bb = Vec3{ba.x + d.x * 50.0f, ba.y + d.y * 50.0f, ba.z + d.z * 50.0f};
     }
     for (int i = 0; i < p->enemies->n; i++) {
         Enemy *e = &p->enemies->e[i];
@@ -1937,15 +1923,15 @@ static void attack_hit_loop(Player *p) {
                 continue; /* 0x457dcb */
             pt = ba;      /* 0x458a10 */
         } else {
-            if (!(seg_cyl(ba, bb, (Vec3){tp.x, tp.y + h * 0.5f, tp.z}, r, h) >= 0))
+            if (!(seg_cyl(ba, bb, Vec3{tp.x, tp.y + h * 0.5f, tp.z}, r, h) >= 0))
                 continue;      /* 0x4589d0 */
             g_hit_frac = 0.5f; /* 0x4589e9: the answer, always 0.5 */
             float dx = tp.x - p->pos.x, dz = tp.z - p->pos.z,
                   l = sqrtf(dx * dx + dz * dz); /* 0x458a3c */
-            dir = l > 0 ? (Vec3){dx / l, 0, dz / l} : (Vec3){dx, 0, dz};
-            pt = (Vec3){ba.x * (1 - g_hit_frac) + bb.x * g_hit_frac,
-                        ba.y * (1 - g_hit_frac) + bb.y * g_hit_frac,
-                        ba.z * (1 - g_hit_frac) + bb.z * g_hit_frac};
+            dir = l > 0 ? Vec3{dx / l, 0, dz / l} : Vec3{dx, 0, dz};
+            pt = Vec3{ba.x * (1 - g_hit_frac) + bb.x * g_hit_frac,
+                      ba.y * (1 - g_hit_frac) + bb.y * g_hit_frac,
+                      ba.z * (1 - g_hit_frac) + bb.z * g_hit_frac};
             if (p->atk == 10)
                 p->yaw = atan2f(dir.x, dir.z); /* 0x458b07: Mover_SetDir */
         }
@@ -1993,8 +1979,8 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
                  else diagonally down */
         Enemy *t = nearest_enemy(p, 500.0f);
         p->has_target = 0;
-        p->target = NULL;
-        p->atk_dir = (Vec3){dir.x, -2.0f, dir.z};
+        p->target = nullptr;
+        p->atk_dir = Vec3{dir.x, -2.0f, dir.z};
         if (t) {
             p->aim = t->pos;
             p->aim.y += enemy_height(t) * 0.8f;
@@ -2009,8 +1995,8 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
             }
         }
         p->dash_start = p->pos;
-        audio_fx(55 + crt_range(0, 3), NULL,
-                 NULL); /* 0x457516 / 0x45752b: air attack cry, 0x37 + rand(0,3) */
+        audio_fx(55 + crt_range(0, 3), nullptr,
+                 nullptr); /* 0x457516 / 0x45752b: air attack cry, 0x37 + rand(0,3) */
         {
             float l = sqrtf(vdot(p->atk_dir, p->atk_dir));
             p->atk_dir.x /= l;
@@ -2025,12 +2011,12 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
         return;
     } /* 0x457560(0, 1), 0x465e00(0, 1) */
     case 2:
-        p->atk_disp = (Vec3){p->atk_dir.x * dt * 1500.0f, p->atk_dir.y * dt * 1500.0f,
-                             p->atk_dir.z * dt * 1500.0f};
+        p->atk_disp = Vec3{p->atk_dir.x * dt * 1500.0f, p->atk_dir.y * dt * 1500.0f,
+                           p->atk_dir.z * dt * 1500.0f};
         p->use_atk_disp = 1;
         if (!attack_probe(p,
-                          (Vec3){p->atk_dir.x * 50.0f, p->atk_dir.y * 50.0f, p->atk_dir.z * 50.0f}))
-            attack_probe(p, (Vec3){dir.x * 100.0f, 0, dir.z * 100.0f});
+                          Vec3{p->atk_dir.x * 50.0f, p->atk_dir.y * 50.0f, p->atk_dir.z * 50.0f}))
+            attack_probe(p, Vec3{dir.x * 100.0f, 0, dir.z * 100.0f});
         if (p->atk == 2 && p->on_ground) {
             p->atk = 6;
             p->atk_t = anim_len(p, 0xd, 0);
@@ -2041,19 +2027,19 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
         return;
     case 3:
         p->atk = 4;
-        p->target = NULL;
+        p->target = nullptr;
         p->atk_t = anim_len(p, 0xc, 0);
-        p->atk_disp = (Vec3){0, 0, 0};
+        p->atk_disp = Vec3{0, 0, 0};
         p->use_atk_disp = 1;
         return; /* hit: hang still */
     case 4:
         p->use_atk_disp = 1;
-        p->atk_disp = (Vec3){0, 0, 0};
+        p->atk_disp = Vec3{0, 0, 0};
         if ((p->atk_t -= dt) > 0)
             return;
         /* recoil direction (-dir.x, 0.8, ~0): the original uses dir.y for z at 0x458686, so z is ~0
          */
-        p->atk_dir = (Vec3){-dir.x, 0, 0};
+        p->atk_dir = Vec3{-dir.x, 0, 0};
         {
             float l = fabsf(p->atk_dir.x);
             if (l > 1e-4f)
@@ -2070,7 +2056,7 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
         p->atk_t -= dt;
         {
             float v = dt * p->atk_t * 1000.0f;
-            p->atk_disp = (Vec3){p->atk_dir.x * v, p->atk_dir.y * v, p->atk_dir.z * v};
+            p->atk_disp = Vec3{p->atk_dir.x * v, p->atk_dir.y * v, p->atk_dir.z * v};
         }
         p->use_atk_disp = 1;
         if (p->atk_t < 0.5f && !(p->air_win > 0)) {
@@ -2126,14 +2112,14 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
             p->atk9_first = 0;
         else
             auto_aim(p); /* 0x457b6c: no aim on the first windup frame (+0x5fd) */
-        dir = (Vec3){sinf(p->yaw), 0, cosf(p->yaw)};
+        dir = Vec3{sinf(p->yaw), 0, cosf(p->yaw)};
         p->use_atk_disp = 1;
-        p->atk_disp = (Vec3){dir.x * dt * 700.0f, 0, dir.z * dt * 700.0f};
+        p->atk_disp = Vec3{dir.x * dt * 700.0f, 0, dir.z * dt * 700.0f};
         attack_hit_loop(p);
         return;
     case 10:
         auto_aim(p);
-        dir = (Vec3){sinf(p->yaw), 0, cosf(p->yaw)};
+        dir = Vec3{sinf(p->yaw), 0, cosf(p->yaw)};
         if (p->charge > 0 && !p->steep_edge &&
             !in->jump) { /* 0x457c09..0x457c3d: charge left, no ledge ahead, no jump */
             if ((p->charge_rumble_t -= dt) <= 0) {
@@ -2141,7 +2127,7 @@ static void attack_update(Player *p, const PlayerInput *in, float dt) {
                 rumble(p, 0.5f, 0.15f);
             } /* 0x457c43: +0x600 (never reset), P+0xac, P+0xa8 */
             p->use_atk_disp = 1;
-            p->atk_disp = (Vec3){dir.x * dt * 700.0f, 0, dir.z * dt * 700.0f};
+            p->atk_disp = Vec3{dir.x * dt * 700.0f, 0, dir.z * dt * 700.0f};
             attack_hit_loop(p);
             return;
         }
@@ -2167,8 +2153,8 @@ static void bomb_drop(Player *p) {
     p->state6 = 0; /* the callers stand for SetState(!= 6) */
     if (!p->bomb)
         return;
-    game_bomb_launch(p->bomb, (Vec3){0, -1, 0}, 0);
-    p->bomb = NULL;
+    game_bomb_launch(p->bomb, Vec3{0, -1, 0}, 0);
+    p->bomb = nullptr;
     p->carrying = 0; /* 0x463c90 leaves the sub-state +0x58c alone */
 }
 /* 0x463530, after the animation choice: part A holds the bomb on the track of Woody's top-level
@@ -2202,11 +2188,11 @@ static void carry_frame(Player *p, float dt) {
             if (thrown) {
                 Vec3 f = {sinf(p->yaw), 1.0f, cosf(p->yaw)};
                 float l = sqrtf(vdot(f, f));
-                dir = (Vec3){f.x / l, f.y / l, f.z / l};
+                dir = Vec3{f.x / l, f.y / l, f.z / l};
                 sp = 1000.0f;
             } /* 0x46380f: 45 degrees up */
             game_bomb_launch(p->bomb, dir, sp);
-            p->bomb = NULL;
+            p->bomb = nullptr;
             p->carrying = 0;
             p->bsub = 0;
             p->state6 = 0;
@@ -2358,13 +2344,13 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
         race_snd_stop(p); /* 0x44c508, 0x468e20 */
         if (kind == 7) {
             jumper_reset(&p->jumper);
-            p->att_inst = NULL;
-            game_splash((Vec3){p->pos.x, p->pos.y + 110.0f, p->pos.z}, sqrtf(vdot(p->vel, p->vel)),
+            p->att_inst = nullptr;
+            game_splash(Vec3{p->pos.x, p->pos.y + 110.0f, p->pos.z}, sqrtf(vdot(p->vel, p->vel)),
                         50.0f);
         } /* 0x44c65e */
         else if (kind == 1) {
             jumper_force_fall(&p->jumper, 0);
-            game_bubble(p->inst, 0, 2.5f, 180.0f, 50.0f, NULL);
+            game_bubble(p->inst, 0, 2.5f, 180.0f, 50.0f, nullptr);
         }
         p->nograv_t = kind == 1   ? anim_len(p, 0x75, 0)
                       : kind == 2 ? anim_len(p, 0x72, 0)
@@ -2373,7 +2359,7 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
         p->dead_cam_req = 0;
         p->hit_anim_t = 0;
         p->script_act = 0;
-        p->ride = NULL;
+        p->ride = nullptr;
         p->race_crouch = 0;
         p->atk = 0;
         p->charge = 0;
@@ -2395,10 +2381,10 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
         p->soft_t = 1.0f;
         p->invuln_hit = 0; /* the blasts' own 0-damage Hit just before must not refuse this one */
         if (kind == 6) {
-            p->ride = NULL;
+            p->ride = nullptr;
             bomb_drop(p);
         } /* as the Kill: off the rocket, the bomb in his hands went off */
-        if (!player_hit(p, 1.0f, (Vec3){0, 0, 0}))
+        if (!player_hit(p, 1.0f, Vec3{0, 0, 0}))
             return;
         kind = 3; /* the last heart: the ordinary death */
     }
@@ -2420,8 +2406,8 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
         p->death_delay = 0.0f;
     if (kind == 7) {
         jumper_reset(&p->jumper);
-        p->att_inst = NULL;
-        game_splash((Vec3){p->pos.x, p->pos.y + 110.0f, p->pos.z}, sqrtf(vdot(p->vel, p->vel)),
+        p->att_inst = nullptr;
+        game_splash(Vec3{p->pos.x, p->pos.y + 110.0f, p->pos.z}, sqrtf(vdot(p->vel, p->vel)),
                     50.0f);
     } /* 0x44c33e: the splash, speed = this frame's displacement / dt (0x44d170) */
     else if (kind != 2 && kind != 9)
@@ -2433,7 +2419,7 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
     p->dead_cam_req = 0;
     p->hit_anim_t = 0;
     p->script_act = 0;
-    p->ride = NULL;
+    p->ride = nullptr;
     bomb_drop(p); /* SetState(2) 0x44c9ad lets go of a bomb */
     p->look = 0;  /* out of state 3 without +0x268: he stays faded out until Reset
                      (docs/PERSO_LOOK.md 4) */
@@ -2443,7 +2429,7 @@ void player_kill(Player *p, int kind) /* vt[38] Kill(kind) 0x44c110 */
     p->dead_kind = kind; /* state := 2 */
     if (kind == 1)
         game_bubble(p->inst, 0, 2.5f, 180.0f, 50.0f,
-                    NULL); /* 0x44c2a9: "?!" over him as he drops into the pit */
+                    nullptr); /* 0x44c2a9: "?!" over him as he drops into the pit */
     if (kind == 2 || kind == 9)
         game_skeleton(); /* 0x44c41f: the skeleton flash 0x477e40 (docs/PARTICLES.md 6) */
     printf("  PLAYER killed (kind %d), lives %d\n", kind, p->lives);
@@ -2459,7 +2445,7 @@ int player_hit(Player *p, float damage,
      * face the attacker */
     float l = sqrtf(dir.x * dir.x + dir.z * dir.z);
     if (p->push_t <= 0) {
-        p->push_dir = l > 0.01f ? (Vec3){dir.x / l, 0, dir.z / l} : (Vec3){0, 0, 0};
+        p->push_dir = l > 0.01f ? Vec3{dir.x / l, 0, dir.z / l} : Vec3{0, 0, 0};
         p->push_t = 0.2f;
         p->push_speed = 0;
     }
@@ -2507,7 +2493,7 @@ static void perso_reset(
         p->health = 3.0f;
     bomb_drop(p);
     p->throw_hold = 0; /* 0x44acb4 */
-    p->ride = NULL;
+    p->ride = nullptr;
     p->dead_kind = 0;
     p->dead_T = 0;
     p->nograv_t = 0;
@@ -2520,7 +2506,7 @@ static void perso_reset(
     slide_reset(p);
     p->push_t = 0;
     p->push_speed = 0;
-    p->att_inst = NULL;
+    p->att_inst = nullptr;
     p->lanim = -1;
     p->board_lanim = -1;
     p->step_u = -1.0f;
@@ -2542,8 +2528,8 @@ static void perso_reset(
     p->special_t = 0; /* 0x44ad5e / 0x44ad64 */
     p->am_win = 0;
     p->am_used = 0;
-    p->am_on = 0;     /* 0x44ad34 / 0x44ad3a / 0x44ad40 */
-    p->follow = NULL; /* 0x44ac84: +0x55c = 0; Reset's SetState(0) (0x44ac3f) ends state 7 */
+    p->am_on = 0;        /* 0x44ad34 / 0x44ad3a / 0x44ad40 */
+    p->follow = nullptr; /* 0x44ac84: +0x55c = 0; Reset's SetState(0) (0x44ac3f) ends state 7 */
     if (p->race_char)
         race_enter(p, 1); /* 0x44ac33: SurfEnter + state 1 */
 }
@@ -2571,7 +2557,7 @@ void player_cin_end(Player *p, int have, Vec3 pos, float yaw) {
         p->yaw = yaw;
         p->pos = pos;
     }
-    p->vel = (Vec3){0, 0, 0};
+    p->vel = Vec3{0, 0, 0};
     p->speed = 0;
     p->ramp_phase = 0;
     p->lanim = -1;
@@ -2713,9 +2699,9 @@ static int ray_instances(const Player *p, const Instance *skip, Vec3 a, Vec3 b, 
     int inside = 0;
     h->kind = 0;
     h->t = 2.0f;
-    h->in = NULL;
-    h->node = NULL;
-    h->n = (Vec3){0, 1, 0};
+    h->in = nullptr;
+    h->node = nullptr;
+    h->n = Vec3{0, 1, 0};
     if (!ins)
         return 0;
     gel_walk_seg(g, a, b, t_world, 0);
@@ -2782,7 +2768,7 @@ static int ray_instances(const Player *p, const Instance *skip, Vec3 a, Vec3 b, 
                 h->in = in;
                 h->node = nd; /* no "t < best": the last one wins */
                 if (!press_normal(in, pl, &h->n))
-                    h->n = (Vec3){P[0], P[1], P[2]};
+                    h->n = Vec3{P[0], P[1], P[2]};
             }
             if (nd->npolys && behind == nd->npolys) {
                 inside = 1;
@@ -2828,7 +2814,7 @@ int player_ray_instances(const Player *p, const Instance *skip, Vec3 a, Vec3 b, 
     if (k == 3) {
         Vec3 d = vsub(a, b);
         float l = sqrtf(vdot(d, d));
-        h.n = l > 1e-6f ? (Vec3){d.x / l, d.y / l, d.z / l} : (Vec3){0, 1, 0};
+        h.n = l > 1e-6f ? Vec3{d.x / l, d.y / l, d.z / l} : Vec3{0, 1, 0};
     }
     *n_out = h.n;
     if (inst_out)
@@ -2844,7 +2830,7 @@ static int climb_ray(const Player *p, Vec3 from, Vec3 to, Vec3 *n_out, const Ins
                      int *peckable) {
     float tw = gel_ray_front(p->gel, from, to);
     InsRayHit h;
-    if (!ray_instances(p, NULL, from, to, tw < 1.0f ? tw : 2.0f, &h))
+    if (!ray_instances(p, nullptr, from, to, tw < 1.0f ? tw : 2.0f, &h))
         return 0;
     g_climb_frac = h.t;
     *n_out = h.n;
@@ -2853,7 +2839,7 @@ static int climb_ray(const Player *p, Vec3 from, Vec3 to, Vec3 *n_out, const Ins
     if (h.kind == 3) {
         Vec3 d = vsub(from, to);
         float l = sqrtf(vdot(d, d));
-        *n_out = l > 1e-6f ? (Vec3){d.x / l, d.y / l, d.z / l} : (Vec3){0, 1, 0};
+        *n_out = l > 1e-6f ? Vec3{d.x / l, d.y / l, d.z / l} : Vec3{0, 1, 0};
     }
     return 1;
 }
@@ -2867,7 +2853,7 @@ static Vec3 climb_probe_to(const Player *p, Vec3 from) {
  * on the ground and in the air alike): attack JUST pressed, attack substate 0 or 10 (the charge
  * run), not climbing yet; the ray of 0x4359b0 from the feet + 40 along the facing over P+4 + 100 =
  * 169 must end on a peckable press node that 0x464e00 accepts. Then SetState(4) with +0x50c = 1
- * (anim 0x14 first, both from the ground and from the air), grip 0.8, Mover_SetDir(NULL), jumper
+ * (anim 0x14 first, both from the ground and from the air), grip 0.8, Mover_SetDir(nullptr), jumper
  * reset, attack window closed (0x457560(0, 1)), facing the wall. No spark here (only the dash probe
  * 0x4575b0 sparks). The grab out of a running dash is attack_probe's (substate 8). */
 static int climb_try(Player *p, const PlayerInput *in) {
@@ -2877,7 +2863,7 @@ static int climb_try(Player *p, const PlayerInput *in) {
     Vec3 from = {p->pos.x, p->pos.y + 40.0f, p->pos.z}, to = climb_probe_to(p, from), n;
     const Instance *wi;
     int peck = 0;
-    if (!climb_ray(p, from, to, &n, &wi, &peck) || !climb_grab(p, n, peck ? wi : NULL))
+    if (!climb_ray(p, from, to, &n, &wi, &peck) || !climb_grab(p, n, peck ? wi : nullptr))
         return 0;
     p->yaw = atan2f(-p->wall_n.x, -p->wall_n.z);
     p->climb_sub = 1;
@@ -2888,7 +2874,7 @@ static int climb_try(Player *p, const PlayerInput *in) {
     p->charge = 0;
     p->speed = 0;
     p->ramp_phase = 0;
-    p->vel = (Vec3){0, 0, 0};
+    p->vel = Vec3{0, 0, 0};
     p->use_atk_disp = 0; /* SetState clears +0x5b4 */
     printf("  CLIMB grab on instance %u\n", wi->index);
     return 1;
@@ -2948,8 +2934,8 @@ static Vec3 climb_update(Player *p, const PlayerInput *in, float dt) {
                           0.95f; /* 0x4a9c9c: just short of the wall, so the mark sits on it */
                 p->peck_t += 0.3f;
                 game_peck_fx(0,
-                             (Vec3){from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f,
-                                    from.z + (to.z - from.z) * f},
+                             Vec3{from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f,
+                                  from.z + (to.z - from.z) * f},
                              &n);
             }
         } else {
@@ -2986,8 +2972,8 @@ static Vec3 climb_update(Player *p, const PlayerInput *in, float dt) {
         float f = 1.0f - (p->over_t > 0 ? p->over_t / p->over_len : 0);
         Vec3 q, fw;
         if (ins_root_at(p->inst, 15, f, 1, &q, &fw))
-            p->root_pos = (Vec3){p->pos.x + (q.x - p->pos.x) * f, p->pos.y + (q.y - p->pos.y) * f,
-                                 p->pos.z + (q.z - p->pos.z) * f};
+            p->root_pos = Vec3{p->pos.x + (q.x - p->pos.x) * f, p->pos.y + (q.y - p->pos.y) * f,
+                               p->pos.z + (q.z - p->pos.z) * f};
         if (p->over_t <= 0) {
             if (ins_root_at(p->inst, 15, 1.0f, 1, &q, &fw)) {
                 p->pos = q;
@@ -3021,24 +3007,24 @@ int player_collect(Player *p, int type, int arg) {
     switch (type) {
     case 30:
         p->lives++;
-        audio_fx(0, NULL, NULL);
+        audio_fx(0, nullptr, nullptr);
         break; /* extra life, SoundFx 0 (0x44f43b) */
     case 34:
         p->bonus_got++;
         p->bonus_count++;
-        audio_fx(3, NULL, NULL);
+        audio_fx(3, nullptr, nullptr);
         break; /* "Bonus Woody", sound 3; 25 = a heart or a life */
     case 35:
         p->special_charges++;
-        audio_fx(2, NULL, NULL);
+        audio_fx(2, nullptr, nullptr);
         break; /* charge for the special action (Perso+0x254), sound 2 */
     case 36:
         p->unique_items++;
-        audio_fx(1, NULL, NULL);
+        audio_fx(1, nullptr, nullptr);
         break; /* unique item (save game flag), sound 1 */
     case 37:
         p->race_bonus++;
-        audio_fx(5, NULL, NULL);
+        audio_fx(5, nullptr, nullptr);
         break; /* "Bonus Race", sound 5 */
     case 38: {
         float t = arg * 0.01f;
@@ -3055,12 +3041,12 @@ int player_collect(Player *p, int type, int arg) {
      * hearts */
     if (p->bonus_count >= 25) {
         p->bonus_count -= 25;
-        audio_fx(4, NULL, NULL);
+        audio_fx(4, nullptr, nullptr);
         if (p->health < 5.0f)
             p->health += 1.0f;
         else {
             p->lives++;
-            audio_fx(0, NULL, NULL);
+            audio_fx(0, nullptr, nullptr);
         }
     } /* 0x44b6e4, 0x44b71a */
     printf("  BONUS type %d collected: woody bonus %d / %d, health %.0f, lives %d\n", type,
@@ -3086,27 +3072,27 @@ static void player_transform(Player *p, int tilt) {
         Vec3 up = p->race_upf, F = {-sinf(p->yaw), 0, -cosf(p->yaw)};
         float lu = sqrtf(vdot(up, up));
         if (lu > 1e-4f && up.y > 0) {
-            up = (Vec3){up.x / lu, up.y / lu, up.z / lu};
+            up = Vec3{up.x / lu, up.y / lu, up.z / lu};
             Vec3 R = vcross(F, up);
             float lr = sqrtf(vdot(R, R));
             if (lr > 1e-4f) {
-                R = (Vec3){R.x / lr, R.y / lr, R.z / lr};
+                R = Vec3{R.x / lr, R.y / lr, R.z / lr};
                 Vec3 Fw = vcross(up, R);
                 float m00 = R.x, m10 = R.y, m20 = R.z, m01 = Fw.x, m11 = Fw.y, m21 = Fw.z,
                       m02 = up.x, m12 = up.y, m22 = up.z, tr = m00 + m11 + m22;
                 Quat q;
                 if (tr > 0) {
                     float k = sqrtf(tr + 1.0f) * 2;
-                    q = (Quat){(m21 - m12) / k, (m02 - m20) / k, (m10 - m01) / k, 0.25f * k};
+                    q = Quat{(m21 - m12) / k, (m02 - m20) / k, (m10 - m01) / k, 0.25f * k};
                 } else if (m00 > m11 && m00 > m22) {
                     float k = sqrtf(1.0f + m00 - m11 - m22) * 2;
-                    q = (Quat){0.25f * k, (m01 + m10) / k, (m02 + m20) / k, (m21 - m12) / k};
+                    q = Quat{0.25f * k, (m01 + m10) / k, (m02 + m20) / k, (m21 - m12) / k};
                 } else if (m11 > m22) {
                     float k = sqrtf(1.0f + m11 - m00 - m22) * 2;
-                    q = (Quat){(m01 + m10) / k, 0.25f * k, (m12 + m21) / k, (m02 - m20) / k};
+                    q = Quat{(m01 + m10) / k, 0.25f * k, (m12 + m21) / k, (m02 - m20) / k};
                 } else {
                     float k = sqrtf(1.0f + m22 - m00 - m11) * 2;
-                    q = (Quat){(m02 + m20) / k, (m12 + m21) / k, 0.25f * k, (m10 - m01) / k};
+                    q = Quat{(m02 + m20) / k, (m12 + m21) / k, 0.25f * k, (m10 - m01) / k};
                 }
                 in->quat = q;
             }
@@ -3144,7 +3130,7 @@ void player_place(Player *p, Vec3 pos, float yaw) {
     p->throw_hold = 0;
     p->pos = pos;
     p->yaw = yaw;
-    p->vel = (Vec3){0, 0, 0};
+    p->vel = Vec3{0, 0, 0};
     p->speed = 0;
     p->ramp_phase = 0;
     p->floor_y = pos.y;
@@ -3263,7 +3249,7 @@ void player_leave_all(Player *p, EkoVM *vm) {
  * ------------------ */
 static Vec3 xz_unit(Vec3 v) {
     float l = sqrtf(v.x * v.x + v.z * v.z);
-    return l > 0 ? (Vec3){v.x / l, 0, v.z / l} : (Vec3){v.x, 0, v.z};
+    return l > 0 ? Vec3{v.x / l, 0, v.z / l} : Vec3{v.x, 0, v.z};
 }
 /* the sound source +0x4a4 of the ride loop (SoundFx 60, 2D): 0x468e50 at the top of every ride
  * frame starts it when the last frame was marked (bit 0) and it is not playing (bit 1), stops it
@@ -3271,17 +3257,17 @@ static Vec3 xz_unit(Vec3 v) {
  * frame, 0x468e20 stops it at once (crash, race kill, SurfEnter) */
 static void race_snd_update(Player *p) {
     if ((p->race_snd & 1) && !(p->race_snd & 2)) {
-        audio_fx(60, NULL, NULL);
+        audio_fx(60, nullptr, nullptr);
         p->race_snd |= 2;
     }
     if (!(p->race_snd & 1) && (p->race_snd & 2)) {
-        audio_fx_stop(60, NULL, 0);
+        audio_fx_stop(60, nullptr, 0);
         p->race_snd &= ~2;
     }
     p->race_snd &= ~1;
 }
 static void race_snd_stop(Player *p) {
-    audio_fx_stop(60, NULL, 0);
+    audio_fx_stop(60, nullptr, 0);
     p->race_snd &= ~2;
 }
 static void race_enter(Player *p, int respawn) /* SurfEnter 0x456150, from Reset for subtypes 4/5 */
@@ -3299,8 +3285,8 @@ static void race_enter(Player *p, int respawn) /* SurfEnter 0x456150, from Reset
     p->race_crouch = 0;
     p->race_crash_t = 0;
     for (int i = 0; i < 4; i++)
-        p->bfx.has_prev[i] = 0;    /* the spray trail starts over */
-    p->race_upf = (Vec3){0, 1, 0}; /* Reset: +0x210 = (0,1,0) */
+        p->bfx.has_prev[i] = 0;  /* the spray trail starts over */
+    p->race_upf = Vec3{0, 1, 0}; /* Reset: +0x210 = (0,1,0) */
     p->race_start_t = anim_len(p, 0x5d, 0);
     p->lanim = -1;
     anim_request(p, 0x5d, 1.0f); /* A->Reset(), A->Request(0x5d) */
@@ -3314,9 +3300,9 @@ void player_boost(Player *p, Vec3 p0, Vec3 dir, float speed, float dur) /* 0x456
     Vec3 d = xz_unit(dir);
     p->boost_t = dur;
     p->boost_speed = speed;
-    p->boost_target = (Vec3){p0.x + d.x * speed * dur * 1.1f, p0.y,
-                             p0.z + d.z * speed * dur * 1.1f}; /* 0x4aa168 */
-    audio_fx(59, NULL, NULL);
+    p->boost_target =
+        Vec3{p0.x + d.x * speed * dur * 1.1f, p0.y, p0.z + d.z * speed * dur * 1.1f}; /* 0x4aa168 */
+    audio_fx(59, nullptr, nullptr);
 }
 /* 0x438400 on the track polyline: index of the segment nearest to P (3D), searched from 0 every
  * frame */
@@ -3332,7 +3318,7 @@ static int race_nearest(const Trajectory *t, Vec3 P) {
             c = A;
         else {
             float u = (dp - da) / (db - da);
-            c = (Vec3){A.x + d.x * u, A.y + d.y * u, A.z + d.z * u};
+            c = Vec3{A.x + d.x * u, A.y + d.y * u, A.z + d.z * u};
         }
         Vec3 e = vsub(c, P);
         float d2 = vdot(e, e);
@@ -3382,10 +3368,10 @@ static Vec3 race_ride(Player *p, const PlayerInput *in, float dt) {
         p->cam_height = 100.0f;
         p->cam_dist = 4.0f; /* 0x41f9f0(2), SetMode(0,0), 0x41f660 / 0x41fa60 / 0x41fa80 */
         if (p->has_ckpt)
-            disp = (Vec3){sinf(p->spawn_yaw), 0, cosf(p->spawn_yaw)}; /* +0x324 */
+            disp = Vec3{sinf(p->spawn_yaw), 0, cosf(p->spawn_yaw)}; /* +0x324 */
         else
-            disp = (Vec3){p->race_path->points[1].x - p->race_path->points[0].x, 0,
-                          p->race_path->points[1].z - p->race_path->points[0].z};
+            disp = Vec3{p->race_path->points[1].x - p->race_path->points[0].x, 0,
+                        p->race_path->points[1].z - p->race_path->points[0].z};
         p->race_stuck = 0;
         p->race_sub = 1;
         p->race_lean = 0;
@@ -3400,7 +3386,7 @@ static Vec3 race_ride(Player *p, const PlayerInput *in, float dt) {
         p->boost_t -= dt;
         p->bfx.mode = 3;
         step = p->boost_speed * dt;
-        disp = (Vec3){p->boost_target.x - p->pos.x, 0, p->boost_target.z - p->pos.z};
+        disp = Vec3{p->boost_target.x - p->pos.x, 0, p->boost_target.z - p->pos.z};
     } else
         p->bfx.mode = 2; /* the spray: sprites twice as big during a boost */
     disp = xz_unit(disp);
@@ -3412,17 +3398,17 @@ static Vec3 race_ride(Player *p, const PlayerInput *in, float dt) {
         p->race_start_t -= dt;        /* start anim: no steering */
     else if (in->left || in->right) { /* action 0 (-1) wins over action 1 (+1) */
         float a = (in->left ? -1.0f : 1.0f) * turn, c = cosf(a), s = sinf(a);
-        disp = (Vec3){old.x * c - old.z * s, 0,
-                      old.x * s + old.z * c}; /* RotateAxis 0x440d40 about (0,1,0) */
+        disp = Vec3{old.x * c - old.z * s, 0,
+                    old.x * s + old.z * c}; /* RotateAxis 0x440d40 about (0,1,0) */
     }
     float d1 = vdot(disp, seg), d2 = vdot(old, seg);
     if (d1 < 0.5f && d1 < d2)
         disp = old; /* 0x4a9014 */
     if (disp.x * disp.x + disp.z * disp.z < 1e-4f)
-        disp = (Vec3){1, 0, 0}; /* M_SetRideDir: |dir| < 0.01 -> x = 1 */
+        disp = Vec3{1, 0, 0}; /* M_SetRideDir: |dir| < 0.01 -> x = 1 */
     p->race_dir = xz_unit(disp);
     p->yaw = atan2f(p->race_dir.x, p->race_dir.z); /* M+0x1c = M+0x10: the facing */
-    disp = (Vec3){p->race_dir.x * step, 0, p->race_dir.z * step};
+    disp = Vec3{p->race_dir.x * step, 0, p->race_dir.z * step};
     jumper_update(&p->jumper, in->jump, 1, p->on_ground, p->pos.y - p->floor_y,
                   dt); /* 0x462d70 with action 4, input allowed */
     disp.y = p->jumper.dy;
@@ -3460,7 +3446,7 @@ static void special_update(Player *p, const PlayerInput *in, float dt) {
             game_special_fx(); /* 0x47ab90 */
             puts("  PLAYER special attack");
         } else if (!p->race_char)
-            audio_fx(9, NULL, NULL);
+            audio_fx(9, nullptr, nullptr);
     }
     if (p->special_st == 1) {
         p->special_t += dt;
@@ -3476,7 +3462,7 @@ static void special_update(Player *p, const PlayerInput *in, float dt) {
                     !game_enemy_thinks(e->inst))
                     continue;
                 n++;
-                int died = enemy_hit(e, 3.0f /* P+0x94 */, (Vec3){0, 0, 0}, p->pos,
+                int died = enemy_hit(e, 3.0f /* P+0x94 */, Vec3{0, 0, 0}, p->pos,
                                      2); /* vtbl[38](3) after it is an empty ret 4 */
                 printf("  SPECIAL hits enemy %u%s\n", e->inst->index, died ? " - dead" : "");
             }
@@ -3534,7 +3520,7 @@ static void duck_update(Player *p, const PlayerInput *in, float dt, int anim_own
             Vec3 a = {p->pos.x, p->pos.y + P_DUCK_H, p->pos.z},
                  e = {p->pos.x, p->pos.y + (P_BODY_H - P_DUCK_H), p->pos.z};
             float f;
-            const Instance *hi = NULL;
+            const Instance *hi = nullptr;
             int kind = ray_4359b0(p, a, e, &f, &hi),
                 blocked = kind != 0; /* 0x465d0b / 0x465d18: [0x53a554] != 0 */
             if (wenv("WOODY_DUCKLOG") && blocked)
@@ -3615,7 +3601,7 @@ static void look_update(Player *p, const PlayerInput *in) {
         bomb_drop(p); /* SetState(3): 0x44c9ad lets go of the bomb, +0x220 = 6 */
         p->atk = 0;
         p->use_atk_disp = 0;
-        p->target = NULL;
+        p->target = nullptr;
         p->has_target = 0;
         p->throw_hold = 0; /* SetState clears +0x5b4, +0x5cd, +0x5f0 */
         p->look = 1;
@@ -3624,8 +3610,8 @@ static void look_update(Player *p, const PlayerInput *in) {
                    p->yaw * 57.2958f);
     } else {
         if (!p->app_menu)
-            audio_fx(9, NULL, NULL); /* 0x44ba5f: "can't" (only while the App is in a game, App+0 !=
-                                        0, 0x44ba52) */
+            audio_fx(9, nullptr, nullptr); /* 0x44ba5f: "can't" (only while the App is in a game,
+                                        App+0 != 0, 0x44ba52) */
         if (wenv("WOODY_LOOKLOG"))
             printf("  LOOK refused (ground %d, camera mode %d)\n", p->on_ground, p->cam_mode);
     }
@@ -3693,8 +3679,8 @@ void player_look_camera(Player *p, FreeCamera *cam, float dt) {
     cam->pitch = p->look_pitch;
     cam->fov_deg = CAM_FOV_Y;
     cam->letterbox = 0;
-    s_look_fwd = (Vec3){sinf(cam->yaw) * cosf(cam->pitch), sinf(cam->pitch),
-                        cosf(cam->yaw) * cosf(cam->pitch)}; /* -R.row1: the view's forward */
+    s_look_fwd = Vec3{sinf(cam->yaw) * cosf(cam->pitch), sinf(cam->pitch),
+                      cosf(cam->yaw) * cosf(cam->pitch)}; /* -R.row1: the view's forward */
     if (wenv("WOODY_LOOKLOG") && (int)(p->play_time * 4) != (int)((p->play_time - dt) * 4))
         printf("  LOOK view yaw %.1f pitch %.1f eye %.0f %.0f %.0f\n", cam->yaw * 57.2958f,
                cam->pitch * 57.2958f, eye.x, eye.y, eye.z);
@@ -3732,9 +3718,9 @@ static void side_update(Player *p, const PlayerInput *in) {
             } /* 0x459d84 */
         }
         if (flip)
-            p->side_walk = (Vec3){-p->side_walk.x, -p->side_walk.y,
-                                  -p->side_walk.z}; /* 0x459d18: * -1.0 (0x4a9500) */
-        p->side_flip = flip;                        /* 0x459d4e */
+            p->side_walk = Vec3{-p->side_walk.x, -p->side_walk.y,
+                                -p->side_walk.z}; /* 0x459d18: * -1.0 (0x4a9500) */
+        p->side_flip = flip;                      /* 0x459d4e */
     }
     Vec3 w = {p->side_walk.x, 0, p->side_walk.z};
     float l = sqrtf(w.x * w.x + w.z * w.z); /* 0x459def: y = 0, xz length */
@@ -3807,7 +3793,7 @@ static void race_check_crash(Player *p, Vec3 old_pos, Vec3 disp, float body_h) {
     if (want > 0 && moved / want < 0.7f) { /* 0x4aa1d8; a frame without displacement is 0/0 in the
                                               original (counted as stuck), not here */
         if (++p->race_stuck > 5 && !wenv("WOODY_GOD")) {
-            game_hit_star((Vec3){p->pos.x, p->pos.y + 150.0f, p->pos.z});
+            game_hit_star(Vec3{p->pos.x, p->pos.y + 150.0f, p->pos.z});
             p->race_sub = 2;
             p->race_crash_t = 0;
             rumble(p, 0.5f, 0.5f);
@@ -3825,7 +3811,7 @@ static void race_check_crash(Player *p, Vec3 old_pos, Vec3 disp, float body_h) {
         Vec3 a = {p->pos.x, p->pos.y + hs[k], p->pos.z}, b = {end.x, end.y + hs[k], end.z}, n, ni;
         float f = gel_ray_hit(p->gel, a, b, &n),
               fi; /* 0x4359b0: world polygons, then instance press nodes */
-        if (player_ray_instances(p, NULL, a, b, &fi, &ni, NULL)) {
+        if (player_ray_instances(p, nullptr, a, b, &fi, &ni, nullptr)) {
             f = fi;
             n = ni;
         } /* an instance hit replaces the world hit (0x432f87) */
@@ -3839,7 +3825,7 @@ static void race_check_crash(Player *p, Vec3 old_pos, Vec3 disp, float body_h) {
             p->yaw = atan2f(-n40.x, -n40.z); /* Mover_SetFacing(-hitN) */
         p->race_sub = 2;
         p->race_crash_t = 0;
-        game_hit_star((Vec3){p->pos.x, p->pos.y + 150.0f, p->pos.z});
+        game_hit_star(Vec3{p->pos.x, p->pos.y + 150.0f, p->pos.z});
         rumble(p, 0.5f, 0.5f);
         puts("  RACE crash (wall ahead)");
     }
@@ -3868,10 +3854,10 @@ static void race_anims(Player *p, const PlayerInput *in, float dt) {
             if (p->jumper.hard_fall) {
                 a = 0x6f;
                 lock_move(p, anim_len(p, 0x6f, 0));
-                game_bubble(p->inst, 1, 2.0f, 180.0f, 50.0f, NULL);
+                game_bubble(p->inst, 1, 2.0f, 180.0f, 50.0f, nullptr);
             } /* 0x464470: LockMove (no effect in state 1) and the curse bubble */
             if (p->ground_kind == 2)
-                game_land_dust((Vec3){p->pos.x, p->pos.y + 30.0f, p->pos.z},
+                game_land_dust(Vec3{p->pos.x, p->pos.y + 30.0f, p->pos.z},
                                p->ground_n); /* 0x464486 */
         }
         if (a >= 0)
@@ -3969,7 +3955,7 @@ static int ray_4359b0(const Player *p, Vec3 a, Vec3 b, float *t, const Instance 
     float tw = gel_ray_front(p->gel, a, b);
     int kind = tw < 1.0f ? 1 : 0;
     InsRayHit h;
-    int k = ray_instances(p, NULL, a, b, kind ? tw : 2.0f, &h);
+    int k = ray_instances(p, nullptr, a, b, kind ? tw : 2.0f, &h);
     if (k) {
         *t = h.t;
         if (inst_out)
@@ -3978,11 +3964,11 @@ static int ray_4359b0(const Player *p, Vec3 a, Vec3 b, float *t, const Instance 
     }
     *t = kind ? tw : 2.0f;
     if (inst_out)
-        *inst_out = NULL;
+        *inst_out = nullptr;
     return kind;
 }
 int player_ray_full(const Player *p, Vec3 a, Vec3 b, float *t) {
-    return ray_4359b0(p, a, b, t, NULL);
+    return ray_4359b0(p, a, b, t, nullptr);
 }
 
 /* Crush test 0x462a40 (Perso_Update 0x44b87c, right after MoveCollide 0x4624f0 - and 0x4567f0 in
@@ -4007,7 +3993,7 @@ static void crush_test(Player *p) {
     float t;
     const Instance *hi;
     int k = ray_4359b0(p, a, b, &t, &hi);
-    if (k && t < 1.0f && p->on_ground && (k == 2 ? hi->a_speed != 0 : p->att_inst != NULL)) {
+    if (k && t < 1.0f && p->on_ground && (k == 2 ? hi->a_speed != 0 : p->att_inst != nullptr)) {
         float free = (b.y - a.y) * t;
         if (free < 2.0f)
             free = 2.0f; /* 0x4a9870 */
@@ -4038,8 +4024,8 @@ static void crush_test(Player *p) {
  * (0x4373ec). */
 static void move_collide(Player *p, Vec3 *dispp, float dt, int racing,
                          const Instance **hit_inst_out, const InsNode **hit_node_out) {
-    const Instance *hit_inst = NULL;
-    const InsNode *hit_node = NULL;
+    const Instance *hit_inst = nullptr;
+    const InsNode *hit_node = nullptr;
     int found;
     Vec3 np, disp, mc_carry = {0, 0, 0}, mc_pos = p->pos, mc_local = p->att_local,
                    mc_world = p->att_world;
@@ -4112,7 +4098,7 @@ static void move_collide(Player *p, Vec3 *dispp, float dt, int racing,
                 const Instance *ri;
                 int k = ray_4359b0(p, from, head, &t, &ri);
                 if (k == 3) {
-                    from = (Vec3){cur.x, gy + 0.1f, cur.z};
+                    from = Vec3{cur.x, gy + 0.1f, cur.z};
                     k = ray_4359b0(p, from, head, &t, &ri);
                 }
                 if (k) {
@@ -4138,7 +4124,7 @@ static void move_collide(Player *p, Vec3 *dispp, float dt, int racing,
     {
         Vec3 probe = {np.x, np.y + P_PROBE_Y, np.z};
         float gy = world_ground(p, probe, &found, &hit_inst, &hit_node);
-        p->floor_is_hull = found && hit_node != NULL;
+        p->floor_is_hull = found && hit_node != nullptr;
         if (found)
             p->floor_y = gy;
         if (found && np.y - gy < 1.0f) {
@@ -4146,18 +4132,17 @@ static void move_collide(Player *p, Vec3 *dispp, float dt, int racing,
             np.y = gy;
         } else
             p->on_ground = 0;
-        p->ground_n = p->on_ground ? g_ground_n : (Vec3){0, 1, 0}; /* 0x45a110 -> Mover+0xd0 */
+        p->ground_n = p->on_ground ? g_ground_n : Vec3{0, 1, 0}; /* 0x45a110 -> Mover+0xd0 */
         p->race_floor_n =
             found && g_ground_n.y >= 0
                 ? g_ground_n
-                : (Vec3){0, 1,
-                         0}; /* 0x4628e0: the floor query's normal, (0,1,0) if it points down */
+                : Vec3{0, 1, 0}; /* 0x4628e0: the floor query's normal, (0,1,0) if it points down */
         p->ground_kind = found ? ground_type(p, g_ground_mat) : 0; /* 0x4628e0 -> Perso+0x308 */
         /* 0x436d80 / 0x436d10: the point remembered on the platform is the probe point itself
          * (swept feet + 43, before the snap to the floor; 0x436f54 passes the probe pointer), not
          * the feet: on a tilting platform (W3C model 10) a point 43 above the deck moves 43·ω
          * further sideways than the deck, and that is what 0x436d20 carries him by */
-        attach_store(p, p->on_ground ? hit_inst : NULL, hit_node, probe);
+        attach_store(p, p->on_ground ? hit_inst : nullptr, hit_node, probe);
     }
     if (np.y < p->gel->bbox[2] - 2000.0f) {
         np = p->pos;
@@ -4204,13 +4189,13 @@ static void follow_update(Player *p) /* 0x44e1c0 */
         printf("  state 7: instance %u has no vector marker (typecode 0), position kept\n",
                p->follow->index);
     }
-    p->move_dir = (Vec3){sinf(p->yaw), 0, cosf(p->yaw)}; /* RampA.dir = M+0x1c = M+0x10 */
+    p->move_dir = Vec3{sinf(p->yaw), 0, cosf(p->yaw)}; /* RampA.dir = M+0x1c = M+0x10 */
     p->speed = 0;
     p->ramp_phase = 0;
     slide_reset(p);
     p->push_t = 0;
     p->push_speed = 0;         /* 0x467110 on RampB, RampC, RampA */
-    p->vel = (Vec3){0, 0, 0};  /* +0x204 stays 0: no displacement of his own */
+    p->vel = Vec3{0, 0, 0};    /* +0x204 stays 0: no displacement of his own */
     player_apply_transform(p); /* Perso_Orient 0x44bd00 */
     if (wenv("WOODY_FOLLOWLOG"))
         printf("  state 7: pos %.0f %.0f %.0f facing %.0f\n", p->pos.x, p->pos.y, p->pos.z,
@@ -4221,7 +4206,7 @@ void player_follow(Player *p, const Instance *obj) /* 0x44e140 */
     if (!obj || p->dead_kind) {
         puts("  1044 refused (no instance, or dead)");
         return;
-    } /* port: the original has no test (NULL crashes in 0x42f6b0) */
+    } /* port: the original has no test (nullptr crashes in 0x42f6b0) */
     player_ground_snap(p); /* 0x462990: floor under feet + 43, onGround = 1, Jumper reset */
     p->ground_22c = 1;
     bomb_drop(p);
@@ -4230,11 +4215,11 @@ void player_follow(Player *p, const Instance *obj) /* 0x44e140 */
     p->script_act = 0;
     p->use_root = 0;
     p->climb_sub = 0;
-    p->ride = NULL; /* whatever state he was in ends (0x44e140 tests none) */
+    p->ride = nullptr; /* whatever state he was in ends (0x44e140 tests none) */
     p->atk = 0;
     p->charge = 0;
     p->use_atk_disp = 0;
-    p->target = NULL;
+    p->target = nullptr;
     p->has_target = 0; /* SetState clears +0x50c, +0x5b4, +0x5cd, +0x5f0 */
     p->follow = obj;
     p->follow_nomark = 0;
@@ -4249,7 +4234,7 @@ void player_follow_end(Player *p) /* 0x44e1a0 */
 {
     if (!p->follow)
         return; /* port: the original's SetState(0) would also end any other state */
-    p->follow = NULL;
+    p->follow = nullptr;
     p->lanim = -1;
     printf("  PLAYER state 7 ends at %.0f %.0f %.0f\n", p->pos.x, p->pos.y, p->pos.z);
 }
@@ -4300,8 +4285,8 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
     if (p->dead_kind)
         p->dead_T += dt;
     if (p->follow && (p->dead_kind || p->script_act || p->ride || p->climb_sub))
-        p->follow =
-            NULL; /* SetState(2 / 5 / 8 / 4) left state 7 (+0x55c itself stays in the original) */
+        p->follow = nullptr; /* SetState(2 / 5 / 8 / 4) left state 7 (+0x55c itself stays in the
+                                original) */
     /* 0x44b980 / 0x458bf0 / 0x459c70 run in every Perso state, after the attack controller and
      * ducking (0x44b7a8): here for the states 5 / 8 / 4, which return below, and after the attack
      * block for the others */
@@ -4340,9 +4325,8 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
             Vec3 q, fw;
             if (ins_root_at(p->inst, p->script_act, f, 1, &q, &fw)) {
                 p->use_root = 1;
-                p->root_pos =
-                    (Vec3){p->pos.x + (q.x - p->pos.x) * f, p->pos.y + (q.y - p->pos.y) * f,
-                           p->pos.z + (q.z - p->pos.z) * f};
+                p->root_pos = Vec3{p->pos.x + (q.x - p->pos.x) * f, p->pos.y + (q.y - p->pos.y) * f,
+                                   p->pos.z + (q.z - p->pos.z) * f};
             }
         }
         if (p->script_t <= 0) {
@@ -4351,7 +4335,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 p->yaw += 3.14159265f;
                 int found;
                 float gy = player_ground_query(
-                    p, p->inst, (Vec3){p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
+                    p, p->inst, Vec3{p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
                 if (found) {
                     p->pos.y = gy;
                     p->floor_y = gy;
@@ -4371,7 +4355,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 }
                 int found;
                 float gy = player_ground_query(
-                    p, p->inst, (Vec3){p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
+                    p, p->inst, Vec3{p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
                 if (found) {
                     p->pos.y = gy;
                     p->floor_y = gy;
@@ -4384,7 +4368,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 lock_move(p, 0.3f); /* 17: the pose is held until the teleport (message 26) resets
                                        the controller */
             p->script_act = 0;
-            p->script_carry = NULL;
+            p->script_carry = nullptr;
         }
         player_apply_transform(p);
         perso_mask200(p, vm, 1);
@@ -4401,9 +4385,9 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 if (u > 1)
                     u = 1;
                 p->ride_cur = q_slerp(p->ride_q0, rq, u);
-                p->pos = (Vec3){p->ride_p0.x + (p->ride_seat.x - p->ride_p0.x) * u,
-                                p->ride_p0.y + (p->ride_seat.y - p->ride_p0.y) * u,
-                                p->ride_p0.z + (p->ride_seat.z - p->ride_p0.z) * u};
+                p->pos = Vec3{p->ride_p0.x + (p->ride_seat.x - p->ride_p0.x) * u,
+                              p->ride_p0.y + (p->ride_seat.y - p->ride_p0.y) * u,
+                              p->ride_p0.z + (p->ride_seat.z - p->ride_p0.z) * u};
             }
         } else {
             p->pos = p->ride_seat;
@@ -4444,7 +4428,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
         if ((p->ride_t <= 0 || leave || ending) && nose.x * nose.x + nose.z * nose.z > 1e-4f)
             p->yaw = atan2f(nose.x, nose.z);
         if (leave) { /* plain fall, no carried speed, facing = flight direction */
-            p->ride = NULL;
+            p->ride = nullptr;
             jumper_reset(&p->jumper);
             jumper_force_fall(&p->jumper, 1);
             p->on_ground = 0;
@@ -4475,7 +4459,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
         Vec3 d = climb_update(p, in, dt);
         const Instance *hi;
         const InsNode *hn;
-        p->vel = (Vec3){d.x / dt, d.y / dt, d.z / dt};
+        p->vel = Vec3{d.x / dt, d.y / dt, d.z / dt};
         move_collide(p, &d, dt, 0, &hi, &hn);
         crush_test(p); /* 0x44b87c */
         player_apply_transform(p);
@@ -4620,8 +4604,8 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 if (v > 0.95f)
                     v = 0.95f; /* 0x4a9c9c */
                 float k = powf(v * P_ICE_TURN, dt * P_REF_FPS);
-                Vec3 a = l > 1e-6f ? (Vec3){p->move_dir.x / l, 0, p->move_dir.z / l} : f;
-                p->move_dir = (Vec3){a.x * k + f.x * (1.0f - k), 0, a.z * k + f.z * (1.0f - k)};
+                Vec3 a = l > 1e-6f ? Vec3{p->move_dir.x / l, 0, p->move_dir.z / l} : f;
+                p->move_dir = Vec3{a.x * k + f.x * (1.0f - k), 0, a.z * k + f.z * (1.0f - k)};
             } else
                 p->move_dir = f;
         }
@@ -4663,7 +4647,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
             Vec3 n = p->ground_n;
             float l = sqrtf(vdot(n, n));
             if (l > 0)
-                n = (Vec3){n.x / l, n.y / l, n.z / l};
+                n = Vec3{n.x / l, n.y / l, n.z / l};
             if (n.y < P_SLIDE_NY && p->on_ground) {
                 if (!p->sliding) {
                     float v =
@@ -4677,7 +4661,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                     p->slide_t1 = sqrtf(v) * P_SLIDE_TIME;
                     p->slide_phase = 1;
                     p->sliding = 1;
-                    p->slide_dir = (Vec3){n.y * n.x, 0, n.y * n.z};
+                    p->slide_dir = Vec3{n.y * n.x, 0, n.y * n.z};
                 }
             } else if (p->sliding) {
                 if (p->on_ground) {
@@ -4724,7 +4708,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                 p->slide_speed = p->slide_target;
             l = sqrtf(vdot(p->slide_dir, p->slide_dir));
             if (l > 0)
-                p->slide_dir = (Vec3){p->slide_dir.x / l, p->slide_dir.y / l, p->slide_dir.z / l};
+                p->slide_dir = Vec3{p->slide_dir.x / l, p->slide_dir.y / l, p->slide_dir.z / l};
         }
         /* vertical motion comes from the Jumper; air control is the unchanged Mover
          * (docs/PERSO_JUMP.md 1.4) */
@@ -4747,8 +4731,8 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
         /* displacement this frame: the attack's own, or Mover + Jumper; then disp.y += dt *
          * (+0x244) */
         disp = p->use_atk_disp ? p->atk_disp
-                               : (Vec3){p->move_dir.x * p->speed * dt, p->jumper.dy,
-                                        p->move_dir.z * p->speed * dt};
+                               : Vec3{p->move_dir.x * p->speed * dt, p->jumper.dy,
+                                      p->move_dir.z * p->speed * dt};
         int hlock =
             p->move_lock >
             0; /* 0x44bc16: ANY LockMove (+0x238 > 0: ducking, hard landing, special attack, bomb
@@ -4807,12 +4791,12 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
             disp.z -= e * p->side_n.z; /* 0x459faf: disp += -e n */
         }
     }
-    p->vel = (Vec3){disp.x / dt, disp.y / dt, disp.z / dt};
+    p->vel = Vec3{disp.x / dt, disp.y / dt, disp.z / dt};
     if (disp.y < 0)
         p->jumper.fallen -= disp.y; /* 0x44b914: fallen height accumulates */
 
-    const Instance *hit_inst = NULL;
-    const InsNode *hit_node = NULL;
+    const Instance *hit_inst = nullptr;
+    const InsNode *hit_node = nullptr;
     Vec3 old_pos = p->pos;
     const float body_h = player_body_height(p);
     move_collide(p, &disp, dt, racing, &hit_inst, &hit_node);
@@ -4824,9 +4808,9 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
                        fps), not renormalised */
         float k = 1.0f - powf(0.9f, dt * P_REF_FPS);
         Vec3 n = p->race_floor_n;
-        p->race_upf = (Vec3){p->race_upf.x + (n.x - p->race_upf.x) * k,
-                             p->race_upf.y + (n.y - p->race_upf.y) * k,
-                             p->race_upf.z + (n.z - p->race_upf.z) * k};
+        p->race_upf = Vec3{p->race_upf.x + (n.x - p->race_upf.x) * k,
+                           p->race_upf.y + (n.y - p->race_upf.y) * k,
+                           p->race_upf.z + (n.z - p->race_upf.z) * k};
     }
     player_apply_transform(p);
     /* animations, Perso_AnimState 0x463e60 (docs/PERSO_MOVE.md 4.3, PERSO_JUMP.md 4): attack
@@ -4977,13 +4961,13 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
             if (p->jumper.hard_fall) {
                 want = 0xa;
                 lock_move(p, anim_len(p, 0xa, 0));
-                game_bubble(p->inst, 1, 2.0f, 180.0f, 50.0f, NULL);
+                game_bubble(p->inst, 1, 2.0f, 180.0f, 50.0f, nullptr);
             } /* hard landing blocks movement; 0x464470: he curses */
             else if (p->ramp_phase != 2)
                 want = 8;
             if (p->ground_kind == 2)
                 game_land_dust(
-                    (Vec3){p->pos.x, p->pos.y + 30.0f, p->pos.z},
+                    Vec3{p->pos.x, p->pos.y + 30.0f, p->pos.z},
                     p->ground_n); /* 0x464486: 0x476140(&pos + (0,30,0), &normal, 3, 0.25, 1.5) */
         }
         if (want == -2) {
@@ -5065,7 +5049,7 @@ void player_update(Player *p, const PlayerInput *in, float dt, EkoVM *vm, float 
 static int cam_ray_blocked(const Player *p, Vec3 a, Vec3 b) {
     float fw = gel_ray_frac(p->gel, a, b), tw = gel_ray_front(p->gel, a, b);
     InsRayHit h;
-    if (!ray_instances(p, NULL, a, b, tw < 1.0f ? tw : 2.0f, &h))
+    if (!ray_instances(p, nullptr, a, b, tw < 1.0f ? tw : 2.0f, &h))
         return fw <= 1.0f;
     return h.kind != 2 ||
            h.in->type != 80; /* 0x422140: only hit kind 2 on category 7 lets it through */
@@ -5128,7 +5112,7 @@ static int camera_sweep(const Player *p, Vec3 P, Vec3 N, Vec3 *out) {
         out->x += d.x;
         out->y += d.y;
         out->z += d.z;
-        Vec3 push = player_sphere_push(p, NULL, *out, CAM_RADIUS);
+        Vec3 push = player_sphere_push(p, nullptr, *out, CAM_RADIUS);
         if (g_sphere_contact) {
             hit = 1;
             out->x += push.x;
@@ -5152,7 +5136,7 @@ static void camera_behind_arc(const Player *p, Vec3 T, Vec3 P, Vec3 F, Vec3 *mv)
         float bx = T.x - (P.x + mv->x), bz = T.z - (P.z + mv->z), ca = az * F.x - ax * F.z,
               cb = bz * F.x - bx * F.z;
         if ((ca < 0 && cb > 0) || (ca > 0 && cb < 0))
-            *mv = (Vec3){0, 0, 0};
+            *mv = Vec3{0, 0, 0};
     }
     float bx = T.x - (P.x + mv->x), bz = T.z - (P.z + mv->z), d1 = sqrtf(bx * bx + bz * bz),
           lo = dist - 5.0f, hi = dist + 5.0f;
@@ -5191,8 +5175,8 @@ static void camera_step(Player *p, float dt, int behind, int quick, int collide)
         if (wenv("WOODY_CAMLOG")) {
             float fi = 2.0f;
             Vec3 n;
-            const Instance *hi = NULL;
-            player_ray_instances(p, NULL, P, T, &fi, &n, &hi);
+            const Instance *hi = nullptr;
+            player_ray_instances(p, nullptr, P, T, &fi, &n, &hi);
             printf("  CAM target hidden: breadcrumbs from %.0f %.0f %.0f (world %.2f, instance %d "
                    "model %d type %d at %.2f)\n",
                    P.x, P.y, P.z, gel_ray_frac(p->gel, P, T), hi ? (int)hi->index : -1,
@@ -5206,72 +5190,73 @@ static void camera_step(Player *p, float dt, int behind, int quick, int collide)
         if (wenv("WOODY_CAMLOG") && (p->cam_n != n0 || p->cam_state != 2))
             printf("  CAM crumbs %d seg %d u %.2f%s\n", p->cam_n, p->cam_seg, p->cam_u,
                    p->cam_state != 2 ? " -> target in sight" : "");
-        goto drop;
-    }
-    if (behind) {
-        float k = dt * (quick ? 7.0f : 3.0f);
-        mv.x = (T.x - look.x * p->cam_dist - P.x) * k;
-        mv.z = (T.z - look.z * p->cam_dist - P.z) * k;
-    } else { /* 0x4242d0: C+0x7e0 = C+0x7e4 = the distance of message 680 (400), dead zone 100 */
-        float vx = T.x - P.x, vz = T.z - P.z, d = sqrtf(vx * vx + vz * vz), dmax = p->cam_dist,
-              dmin = dmax - 100.0f;
-        if (d > 1e-3f) {
-            vx /= d;
-            vz /= d;
-            float lx = L.x - P.x, lz = L.z - P.z, ll = sqrtf(lx * lx + lz * lz);
-            float k = (ll > 1e-3f && (lx * -look.x + lz * -look.z) / ll > 0.7f)
-                          ? 10.0f
-                          : 1.0f; /* player walks toward the camera */
-            if (d < dmin) {
-                float st = (dmax / d) * dt * k * 66.6667f;
-                if (d + st > dmin)
-                    st = dmin - d;
-                mv.x = -vx * st;
-                mv.z = -vz * st;
-            } else if (d > dmax) {
-                float st = (d / dmax) * dt * 433.333f;
-                if (d - st < dmax)
-                    st = d - dmax;
-                mv.x = vx * st;
-                mv.z = vz * st;
+    } else {
+        if (behind) {
+            float k = dt * (quick ? 7.0f : 3.0f);
+            mv.x = (T.x - look.x * p->cam_dist - P.x) * k;
+            mv.z = (T.z - look.z * p->cam_dist - P.z) * k;
+        } else { /* 0x4242d0: C+0x7e0 = C+0x7e4 = the distance of message 680 (400), dead zone 100
+                  */
+            float vx = T.x - P.x, vz = T.z - P.z, d = sqrtf(vx * vx + vz * vz), dmax = p->cam_dist,
+                  dmin = dmax - 100.0f;
+            if (d > 1e-3f) {
+                vx /= d;
+                vz /= d;
+                float lx = L.x - P.x, lz = L.z - P.z, ll = sqrtf(lx * lx + lz * lz);
+                float k = (ll > 1e-3f && (lx * -look.x + lz * -look.z) / ll > 0.7f)
+                              ? 10.0f
+                              : 1.0f; /* player walks toward the camera */
+                if (d < dmin) {
+                    float st = (dmax / d) * dt * k * 66.6667f;
+                    if (d + st > dmin)
+                        st = dmin - d;
+                    mv.x = -vx * st;
+                    mv.z = -vz * st;
+                } else if (d > dmax) {
+                    float st = (d / dmax) * dt * 433.333f;
+                    if (d - st < dmax)
+                        st = d - dmax;
+                    mv.x = vx * st;
+                    mv.z = vz * st;
+                }
+            }
+            if (p->cam_orbit_x != 0) { /* PORT EXTRA: the right stick turns the camera round T
+                                        * (stick right = view turns right); a move like any other,
+                                        * so the sweep and the veto below still apply */
+                float a = p->cam_orbit_x * CAM_ORBIT_RATE * dt, c = cosf(a), s = sinf(a),
+                      ox = P.x + mv.x - T.x, oz = P.z + mv.z - T.z;
+                mv.x = T.x + ox * c - oz * s - P.x;
+                mv.z = T.z + ox * s + oz * c - P.z;
             }
         }
-        if (p->cam_orbit_x !=
-            0) { /* PORT EXTRA: the right stick turns the camera round T (stick right = view turns
-                  * right); a move like any other, so the sweep and the veto below still apply */
-            float a = p->cam_orbit_x * CAM_ORBIT_RATE * dt, c = cosf(a), s = sinf(a),
-                  ox = P.x + mv.x - T.x, oz = P.z + mv.z - T.z;
-            mv.x = T.x + ox * c - oz * s - P.x;
-            mv.z = T.z + ox * s + oz * c - P.z;
+        if (behind)
+            camera_behind_arc(p, T, P, look, &mv);
+        if (rising)
+            mv.y = (P.y - T.y < 300.0f) ? T.y - p->cam_tprev.y : 0;
+        else
+            mv.y = (T.y + p->cam_height + p->cam_lift - P.y) * 6.0f * dt;
+        Vec3 N = {P.x + mv.x, P.y + mv.y, P.z + mv.z};
+        if (collide) {
+            /* Center_Collide 0x422e30: the sphere r = 40 swept from P to P + move (0x439c50); on
+             * contact the correction corr = where the sweep ended - (P + move). Then the veto
+             * 0x423a40: a step after which the camera no longer sees T is refused - move = 0, and
+             * SubCenter 0x422f10 sweeps again with that zero move, so corr keeps only the push-out
+             * of the spot the camera stands on (0 when it touches nothing). P += move + corr. The
+             * out-of-world tests around it (0x40aba0 = -1) can never fire: the kd descent 0x40ab60
+             * always ends in a leaf (docs/CAMERA.md 3.6). */
+            Vec3 out;
+            if (camera_sweep(p, P, N, &out))
+                N = out;
+            if (cam_ray_blocked(p, N, T)) {
+                if (wenv("WOODY_CAMLOG") && wenv("WOODY_CAMLOG")[0] == '2')
+                    printf("  CAM blind move refused at %.0f %.0f %.0f\n", N.x, N.y, N.z);
+                N = camera_sweep(p, P, P, &out) ? out : P;
+            }
         }
+        p->cam_pos = N;
+        p->cam_tprev = T;
     }
-    if (behind)
-        camera_behind_arc(p, T, P, look, &mv);
-    if (rising)
-        mv.y = (P.y - T.y < 300.0f) ? T.y - p->cam_tprev.y : 0;
-    else
-        mv.y = (T.y + p->cam_height + p->cam_lift - P.y) * 6.0f * dt;
-    Vec3 N = {P.x + mv.x, P.y + mv.y, P.z + mv.z};
-    if (collide) {
-        /* Center_Collide 0x422e30: the sphere r = 40 swept from P to P + move (0x439c50); on
-         * contact the correction corr = where the sweep ended - (P + move). Then the veto 0x423a40:
-         * a step after which the camera no longer sees T is refused - move = 0, and SubCenter
-         * 0x422f10 sweeps again with that zero move, so corr keeps only the push-out of the spot
-         * the camera stands on (0 when it touches nothing). P += move + corr. The out-of-world
-         * tests around it (0x40aba0 = -1) can never fire: the kd descent 0x40ab60 always ends in a
-         * leaf (docs/CAMERA.md 3.6). */
-        Vec3 out;
-        if (camera_sweep(p, P, N, &out))
-            N = out;
-        if (cam_ray_blocked(p, N, T)) {
-            if (wenv("WOODY_CAMLOG") && wenv("WOODY_CAMLOG")[0] == '2')
-                printf("  CAM blind move refused at %.0f %.0f %.0f\n", N.x, N.y, N.z);
-            N = camera_sweep(p, P, P, &out) ? out : P;
-        }
-    }
-    p->cam_pos = N;
-    p->cam_tprev = T;
-drop: /* the look point (0x4223b0) runs in every state */
+    /* The look point (0x4223b0) runs in every state. */
     if (rising || falling) {
         p->cam_drop += 450.0f * dt;
         if (p->cam_drop > 150.0f)
@@ -5286,8 +5271,8 @@ drop: /* the look point (0x4223b0) runs in every state */
 void player_camera_reset(Player *p) {
     p->cam_init = 1;
     p->cam_state = 0;
-    p->cam_tprev = (Vec3){p->pos.x, p->pos.y + CAM_TARGET_Y, p->pos.z}; /* 0x422350: state 0 */
-    p->cam_pos = (Vec3){p->pos.x - sinf(p->yaw), p->pos.y + 100.0f, p->pos.z - cosf(p->yaw)};
+    p->cam_tprev = Vec3{p->pos.x, p->pos.y + CAM_TARGET_Y, p->pos.z}; /* 0x422350: state 0 */
+    p->cam_pos = Vec3{p->pos.x - sinf(p->yaw), p->pos.y + 100.0f, p->pos.z - cosf(p->yaw)};
     camera_step(p, 0.1f, 1, 0, 1);
     g_cam_resetting = 1;
     for (int i = 0; i < 100; i++)
@@ -5343,8 +5328,8 @@ void player_camera(Player *p, FreeCamera *cam, float dt, int behind_key) {
 static Quat q_unit(Quat q) {
     float n = sqrtf(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
     if (n < 1e-9f)
-        return (Quat){0, 0, 0, 1};
-    return (Quat){q.x / n, q.y / n, q.z / n, q.w / n};
+        return Quat{0, 0, 0, 1};
+    return Quat{q.x / n, q.y / n, q.z / n, q.w / n};
 }
 Quat q_slerp(Quat a, Quat b, float u) {
     a = q_unit(a);
@@ -5352,7 +5337,7 @@ Quat q_slerp(Quat a, Quat b, float u) {
     float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     if (d < 0) {
         d = -d;
-        b = (Quat){-b.x, -b.y, -b.z, -b.w};
+        b = Quat{-b.x, -b.y, -b.z, -b.w};
     }
     float ka = 1 - u, kb = u;
     if (d < 0.9995f) {
@@ -5361,7 +5346,7 @@ Quat q_slerp(Quat a, Quat b, float u) {
         kb = sinf(u * th) / s;
     }
     return q_unit(
-        (Quat){a.x * ka + b.x * kb, a.y * ka + b.y * kb, a.z * ka + b.z * kb, a.w * ka + b.w * kb});
+        Quat{a.x * ka + b.x * kb, a.y * ka + b.y * kb, a.z * ka + b.z * kb, a.w * ka + b.w * kb});
 }
 int player_mount(Player *p, Instance *obj) /* 0x465740 */
 {
@@ -5376,7 +5361,7 @@ int player_mount(Player *p, Instance *obj) /* 0x465740 */
     p->speed = 0;
     p->ramp_phase = 0;
     p->push_t = 0;
-    p->att_inst = NULL;
+    p->att_inst = nullptr;
     p->ride_p0 = p->pos;
     p->ride_q0 = p->ride_cur = p->inst->quat;
     p->ride_t = 0.7f;
@@ -5424,7 +5409,7 @@ void player_script_action(Player *p, int act, int have, Vec3 p0, Vec3 dir) {
     anim_request(p, lg, 1.0f);
     p->script_total = p->script_t = anim_len(p, lg, 0);
     p->script_faded = 0;
-    p->script_carry = NULL; /* +0x554 = arg 3 (0x44dde1) */
+    p->script_carry = nullptr; /* +0x554 = arg 3 (0x44dde1) */
     if (act == 18)
         p->fade_req =
             2; /* fade in 0.5 s on the first frame (0x44dc2b). The camera is NOT cut here: the tail
@@ -5472,7 +5457,7 @@ void player_face_action(Player *p, int act, Vec3 at) {
     anim_request(p, lg, 1.0f);
     p->script_total = p->script_t = 0;
     p->script_faded = 0;
-    p->script_carry = NULL;
+    p->script_carry = nullptr;
     player_apply_transform(p);
 }
 /* 0x462990: the floor under feet + 43 (GetHeight 0x435650) becomes his height, onGround = 1, Jumper
@@ -5482,7 +5467,7 @@ void player_face_action(Player *p, int act, Vec3 at) {
 void player_ground_snap(Player *p) {
     int found;
     float gy =
-        player_ground_query(p, p->inst, (Vec3){p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
+        player_ground_query(p, p->inst, Vec3{p->pos.x, p->pos.y + P_PROBE_Y, p->pos.z}, &found);
     p->pos.y =
         found ? gy
               : p->pos.y + P_PROBE_Y; /* pos.y = [0x53a568] always: with nothing below it still
@@ -5508,10 +5493,10 @@ void player_teleport(Player *p, Vec3 pos, int have_dir,
         p->pos = pos;
         if (have_dir && dir.x * dir.x + dir.z * dir.z > 1e-6f)
             p->yaw = atan2f(dir.x, dir.z);
-        p->vel = (Vec3){0, 0, 0};
+        p->vel = Vec3{0, 0, 0};
         p->speed = 0;
         p->ramp_phase = 0;
-        p->att_inst = NULL;
+        p->att_inst = nullptr;
         p->lanim = -1;
         p->step_u = -1.0f;
         p->board_lanim = -1; /* 0x44a688: B->Reset() too */
@@ -5542,7 +5527,7 @@ void player_side_start(Player *p, Vec3 a, Vec3 d, int v) {
     player_ground_snap(p); /* 0x459adf: 0x462990 again, outside the state-5 test */
     p->side_l = v == 1;
     p->side_r = v != 1; /* 0x459ae9: v == 1 -> +0x4ed (the left key walks along d), else +0x4ee */
-    p->side_n = (Vec3){-d.z, 0, d.x}; /* 0x459bbf..0x459c13: +0x4f0 = normalize(d x (0,1,0))
+    p->side_n = Vec3{-d.z, 0, d.x}; /* 0x459bbf..0x459c13: +0x4f0 = normalize(d x (0,1,0))
                                          (0x41af10 = this x arg, 0x4239f0) */
     p->side_pd = -(p->side_n.x * a.x + p->side_n.z * a.z); /* 0x459c09..0x459c4f: +0x4fc = -n.A */
     p->side_walk = d;                                      /* 0x459c52: +0x500 = d */
@@ -5559,8 +5544,8 @@ void player_script_hold(Player *p, float t) {
 }
 
 void player_free(Player *p) {
-    g_rider = g_rider_board = NULL; /* they point into the level's instances; the next level's load
-                                       runs floor queries before player_update */
+    g_rider = g_rider_board = nullptr; /* they point into the level's instances; the next level's
+                                       load runs floor queries before player_update */
     free(p->inside);
     free(p->vol_inst);
     free(p->vol_node);

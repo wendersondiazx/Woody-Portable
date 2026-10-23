@@ -772,7 +772,7 @@ static void apc_decode(HnmFile *h, const uint8_t *p, uint32_t n) {
         frames = h->sound_done < h->sound_total ? h->sound_total - h->sound_done : 0;
     if ((int)frames + h->npcm > h->pcm_cap) {
         int cap = (int)frames + h->npcm + 4096;
-        int16_t *q = realloc(h->pcm, (size_t)cap * h->channels * sizeof *q);
+        int16_t *q = static_cast<int16_t *>(realloc(h->pcm, (size_t)cap * h->channels * sizeof *q));
         if (!q)
             return;
         h->pcm = q;
@@ -817,7 +817,7 @@ int hnm_open(HnmFile *h, const char *path) {
     }
     size_t n = (size_t)h->width * (h->height + 2 * MARGIN);
     for (int k = 0; k < 2; k++)
-        if (!(h->buf[k] = calloc(n, 2))) {
+        if (!(h->buf[k] = static_cast<uint16_t *>(calloc(n, 2)))) {
             hnm_close(h);
             return -1;
         }
@@ -839,7 +839,7 @@ int hnm_next(HnmFile *h) {
         return -1;
     size -= 4;
     if (size + 16 > h->chunk_cap) {
-        uint8_t *c = realloc(h->chunk, size + 16);
+        uint8_t *c = static_cast<uint8_t *>(realloc(h->chunk, size + 16));
         if (!c)
             return -1;
         h->chunk = c;

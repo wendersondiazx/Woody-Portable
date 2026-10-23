@@ -346,6 +346,11 @@ QString convert(const Options &o, const Progress &progress, const std::atomic_bo
         write(game + '/' + pair.second, f.readAll());
     }
     write(game + "/woody-fps.txt", QByteArray::number(o.fps) + "\n");
+    for (const QString &name : QDir(":/loading").entryList({"loading_*.rgba"}, QDir::Files)) {
+        QFile background(":/loading/" + name);
+        require(background.open(QIODevice::ReadOnly), "Missing loading background: " + name);
+        write(game + "/data/presentation/" + name, background.readAll());
+    }
     write(game + "/woody-performance.cfg",
           QString("width=%1\nheight=%2\ndetail=%3\ndistance=%4\nmemory=%5\nparticles=%6\ntextures=%"
                   "7\nfilter=%8\nmusic=%9\n")
@@ -363,7 +368,8 @@ QString convert(const Options &o, const Progress &progress, const std::atomic_bo
     QJsonObject report{{"game_id", "SLUS-20341"},
                        {"converter", "C++ / Qt"},
                        {"version", "1.1.0 beta"},
-                       {"runtime", "r7"},
+                       {"runtime", "r8"},
+                       {"engine_language", "C++17"},
                        {"memory_mb", o.memory},
                        {"particles", o.particles},
                        {"half_textures", o.textures == 1},
@@ -378,7 +384,7 @@ QString convert(const Options &o, const Progress &progress, const std::atomic_bo
                        {"hardware_fps_verified", false}};
     write(game + "/conversion.json", QJsonDocument(report).toJson());
     write(game + "/LEIA-ME.txt",
-          "WoodyPSP r7 / Studio 1.1.0 beta\r\nCopy WOODYPSP to PSP/GAME on your PSP storage.\r\n"
+          "WoodyPSP r8 / Studio 1.1.0 beta\r\nCopy WOODYPSP to PSP/GAME on your PSP storage.\r\n"
           "Profiles support PSP-1000, 2000, 3000, Go and Street (32/64 MB).\r\n"
           "Music is experimental and disabled by default. Sound effects and dialogue remain "
           "enabled.\r\n"

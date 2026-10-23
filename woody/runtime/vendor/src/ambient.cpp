@@ -37,7 +37,7 @@ typedef struct {
         life0; /* +0x110..0x118 = rgb / 255, +0x11c = arg * 0.01: the base lifetime in s */
     int force;
     float interval, acc, zr;
-    int rot, grid_ok;   /* +0x14c, +0x140, +0x13c, +0x148, +0x138, +0x124 != NULL */
+    int rot, grid_ok;   /* +0x14c, +0x140, +0x13c, +0x148, +0x138, +0x124 != nullptr */
     float grid[400][3]; /* +0x124: 5 x 5 cells x 16 start points on the top of the box (0x472b40) */
     int logged;
 } Amb;
@@ -61,7 +61,7 @@ static Amb *amb_of(Instance *in, int create) {
         if (g_amb[i].in == in)
             return &g_amb[i];
     if (!create || g_namb >= AMB_MAX)
-        return NULL;
+        return nullptr;
     Amb *a = &g_amb[g_namb++];
     memset(a, 0, sizeof *a);
     a->in = in;
@@ -103,7 +103,7 @@ static void amb_box(const Instance *in, int ni, float lo[3], float hi[3]) {
  * consecutive triples */
 static void amb_plane(const Model *m, const InsNode *n, const InsPoly *p, float out[4]) {
     float best = 0, nx = 1, ny = 0, nz = 0;
-    const InsPoint *rb = NULL;
+    const InsPoint *rb = nullptr;
     for (uint32_t i = 0; i < p->nverts; i++) {
         const InsPoint *P = &m->points[p->indices[i]],
                        *Q = &m->points[p->indices[(i + 1) % p->nverts]],
@@ -130,12 +130,12 @@ static void amb_plane(const Model *m, const InsNode *n, const InsPoly *p, float 
 /* the original's 3x4 node matrix has rows = the images of the local axes (+0x00, +0x0c, +0x18) and
  * the origin at +0x24; the port's Mat4 is column-major, so row k is column k here */
 static Vec3 m_point(const Mat4 *M, const float p[3]) {
-    return mat4_apply(M, (Vec3){p[0], p[1], p[2]});
+    return mat4_apply(M, Vec3{p[0], p[1], p[2]});
 }
 static Vec3 m_dir(const Mat4 *M, const float d[3]) {
     const float *o = M->m;
-    return (Vec3){o[0] * d[0] + o[4] * d[1] + o[8] * d[2], o[1] * d[0] + o[5] * d[1] + o[9] * d[2],
-                  o[2] * d[0] + o[6] * d[1] + o[10] * d[2]};
+    return Vec3{o[0] * d[0] + o[4] * d[1] + o[8] * d[2], o[1] * d[0] + o[5] * d[1] + o[9] * d[2],
+                o[2] * d[0] + o[6] * d[1] + o[10] * d[2]};
 }
 static void
 v_norm(Vec3 *v) /* the normalisations of 0x47e050 / 0x47d440 / 0x47e230: skipped when |v| <= 0 */
@@ -150,7 +150,7 @@ v_norm(Vec3 *v) /* the normalisations of 0x47e050 / 0x47d440 / 0x47e230: skipped
 static AmbFx *fx_new(int kind, int owner) {
     AmbFx *f = game_fx_amb_new();
     if (!f)
-        return NULL; /* 0x47e062 / 0x47e172 / 0x47e241 / 0x47e321: count >= 2000 -> nothing */
+        return nullptr; /* 0x47e062 / 0x47e172 / 0x47e241 / 0x47e321: count >= 2000 -> nothing */
     f->kind = kind;
     f->owner = owner;
     return f;
@@ -331,8 +331,8 @@ static void amb_think_spawn(Amb *a, int ai) {
                 f->age = f->life * s; /* the first fill starts spread over the lifetime */
                 f->dir = N;
                 f->speed = crt_rnd() * 20.0f + 40.0f; /* 0x4a9994 = 20, 0x4ab294 = 40 */
-                f->pos = (Vec3){w.x + N.x * f->age * f->speed, w.y + N.y * f->age * f->speed,
-                                w.z + N.z * f->age * f->speed};
+                f->pos = Vec3{w.x + N.x * f->age * f->speed, w.y + N.y * f->age * f->speed,
+                              w.z + N.z * f->age * f->speed};
             }
         }
         a->live++; /* counted even when the pool was full */
@@ -441,8 +441,8 @@ static int amb_butterfly_run(AmbFx *f, Amb *a, float dt) {
             f->state = 1;
         if (f->state == 2 && r <= 0.008f * k) {
             f->state = 0;
-            f->dir = (Vec3){in->position.x - f->pos.x, in->position.y - f->pos.y,
-                            in->position.z - f->pos.z};
+            f->dir = Vec3{in->position.x - f->pos.x, in->position.y - f->pos.y,
+                          in->position.z - f->pos.z};
             v_norm(&f->dir);
         }
     }
@@ -470,12 +470,12 @@ static int amb_butterfly_run(AmbFx *f, Amb *a, float dt) {
         f->pos.z += dt * f->dir.z * 100.0f;
         if (!amb_inside(in, f->pos)) {
             if (f->state == 0 || (f->state == 1 && f->pos.y > a->floor_y)) {
-                f->dir = (Vec3){in->position.x - f->pos.x, in->position.y - f->pos.y,
-                                in->position.z - f->pos.z};
+                f->dir = Vec3{in->position.x - f->pos.x, in->position.y - f->pos.y,
+                              in->position.z - f->pos.z};
                 v_norm(&f->dir);
             } else if (f->state == 1) { /* 0x47d74f */
                 f->state = 2;
-                f->dir = (Vec3){in->position.x - f->pos.x, 0, in->position.z - f->pos.z};
+                f->dir = Vec3{in->position.x - f->pos.x, 0, in->position.z - f->pos.z};
                 v_norm(&f->dir);
             }
         }
@@ -504,7 +504,7 @@ static int amb_butterfly_run(AmbFx *f, Amb *a, float dt) {
     Vec3 B0 = {V.z, 0, -V.x};
     l = sqrtf(B0.x * B0.x + B0.z * B0.z);
     if (l < 1e-6f) {
-        B0 = (Vec3){1, 0, 0};
+        B0 = Vec3{1, 0, 0};
         l = 1;
     }
     B0.x /= l;
@@ -545,7 +545,8 @@ int ambient_fx_run(AmbFx *f, float dt, const float *eye) {
          * (0x1001d), rotation (int)(age * 250) in 1/512 turn; alpha 1 until u = 0.7, then down to 0
          * at u = 1 (0x4aa1d8, 0x4abd30 = 3.33) */
         float u = f->age / f->life, al = u < 0.7f ? 1.0f : 1.0f - (u - 0.7f) * 3.33f;
-        hud_world_spr(29, &f->pos.x, 25.0f, (int)lrintf(f->age * 250.0f), a->rgb, al, 7, NULL, 0);
+        hud_world_spr(29, &f->pos.x, 25.0f, (int)lrintf(f->age * 250.0f), a->rgb, al, 7, nullptr,
+                      0);
         return 1;
     }
     if (f->kind == K_DROP) { /* 0x47de10 */

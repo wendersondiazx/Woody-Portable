@@ -1,6 +1,6 @@
 /* Rigid mesh cache for PSP. Included after the shared colour/UV helpers.
  * CPU clipping remains the fallback for any node crossing a guard plane.
- * PSPGL copies and pins buffer data; CPU cache memory is never GE scratch. */
+ * The native GU backend retains submitted buffers until the GE completes them. */
 struct PspRigidVertex {
     float u, v;
     uint32_t color;
@@ -12,6 +12,7 @@ struct PspRigidRun {
 struct PspRigidCache {
     struct PspRigidCache *next;
     unsigned node, count, nruns;
+    int pass;
     GLuint vertices, indices;
     struct PspRigidVertex *data;
     uint32_t *point, *material, *poly_first;
@@ -45,7 +46,7 @@ static void psp_rigid_free(Renderer *r) {
     for (unsigned mi = 0; mi < r->ins->nmodels; mi++)
         for (unsigned ii = 0; ii < r->ins->models[mi].ninstances; ii++) {
             Instance *in = &r->ins->models[mi].instances[ii];
-            struct PspRigidCache *c = in->psp_rigid_cache;
+            struct PspRigidCache *c = static_cast<PspRigidCache *>(in->psp_rigid_cache);
             while (c) {
                 struct PspRigidCache *next = c->next;
                 psp_rigid_destroy(c);
@@ -54,19 +55,21 @@ static void psp_rigid_free(Renderer *r) {
             in->psp_rigid_cache = NULL;
         }
 }
-static struct PspRigidCache *psp_rigid_build(const Renderer *r, Instance *inst, unsigned ni) {
+static struct PspRigidCache *psp_rigid_build(const Renderer *r, Instance *inst, unsigned ni, int pass) {
     Model *m = inst->model;
     InsNode *n = &m->nodes[ni];
     unsigned count = 0;
     for (unsigned k = 0; k < n->npolys; k++) {
         InsPoly *p = &n->polys[k];
+        if (mat_blended(r, p->material) != pass)
+            continue;
         if (p->nverts < 3)
             continue;
         if (!(p->material & 0x8000)) {
             if (p->material >= r->tex->nmaterials)
                 return NULL;
             unsigned group = r->tex->materials[p->material].group;
-            if (group >= r->tex->ngroups || (r->tex->groups[group].flags & 2))
+            if (group >= r->tex->ngroups)
                 return NULL;
         }
         if (p->nverts > 21847 || count > 65535 - (p->nverts - 2) * 3)
@@ -80,27 +83,30 @@ static struct PspRigidCache *psp_rigid_build(const Renderer *r, Instance *inst, 
                    (n->npolys + 1) * sizeof(uint32_t) + n->npolys * sizeof(struct PspRigidRun);
     if (bytes > PSP_RIGID_BUDGET - psp_rigid_bytes)
         return NULL;
-    struct PspRigidCache *c = calloc(1, sizeof *c);
+    struct PspRigidCache *c = static_cast<PspRigidCache *>(calloc(1, sizeof *c));
     if (!c)
         return NULL;
     c->bytes = bytes;
     psp_rigid_bytes += bytes;
-    c->data = malloc(count * sizeof *c->data);
-    c->point = malloc(count * sizeof *c->point);
-    c->material = malloc(count * sizeof *c->material);
-    c->visible = malloc(count * sizeof *c->visible);
-    c->poly_first = malloc((n->npolys + 1) * sizeof *c->poly_first);
-    c->runs = calloc(n->npolys, sizeof *c->runs);
+    c->data = static_cast<PspRigidVertex *>(malloc(count * sizeof *c->data));
+    c->point = static_cast<uint32_t *>(malloc(count * sizeof *c->point));
+    c->material = static_cast<uint32_t *>(malloc(count * sizeof *c->material));
+    c->visible = static_cast<GLushort *>(malloc(count * sizeof *c->visible));
+    c->poly_first = static_cast<uint32_t *>(malloc((n->npolys + 1) * sizeof *c->poly_first));
+    c->runs = static_cast<PspRigidRun *>(calloc(n->npolys, sizeof *c->runs));
     if (!c->data || !c->point || !c->material || !c->visible || !c->poly_first || !c->runs) {
         psp_rigid_destroy(c);
         return NULL;
     }
     c->node = ni;
+    c->pass = pass;
     c->count = count;
     unsigned used = 0;
     for (unsigned k = 0; k < n->npolys; k++) {
         InsPoly *p = &n->polys[k];
         c->poly_first[k] = used;
+        if (p->nverts < 3 || mat_blended(r, p->material) != pass)
+            continue;
         for (unsigned t = 2; t < p->nverts; t++) {
             unsigned corners[3] = {0, t - 1, t};
             const Material *mat = (p->material & 0x8000) ? NULL : &r->tex->materials[p->material];
@@ -133,19 +139,19 @@ static struct PspRigidCache *psp_rigid_build(const Renderer *r, Instance *inst, 
     c->poly_first[n->npolys] = used;
     glGenBuffersARB(1, &c->vertices);
     glGenBuffersARB(1, &c->indices);
-    c->next = inst->psp_rigid_cache;
+    c->next = static_cast<PspRigidCache *>(inst->psp_rigid_cache);
     inst->psp_rigid_cache = c;
     return c;
 }
 static int psp_rigid_draw(const Renderer *r, Instance *inst, unsigned ni, int pass, unsigned frame,
                           int helper) {
-    if (pass || frame || helper >= 0 || g_fading || g_fade_alpha != 1.0f || inst_fading(inst) ||
+    if (frame || helper >= 0 || g_fading || g_fade_alpha != 1.0f || inst_fading(inst) ||
         inst->uv_mode || g_idyn_n || wenv("WOODY_NORIGIDCACHE"))
         return 0;
-    struct PspRigidCache *c = inst->psp_rigid_cache;
-    while (c && c->node != ni)
+    struct PspRigidCache *c = static_cast<PspRigidCache *>(inst->psp_rigid_cache);
+    while (c && (c->node != ni || c->pass != pass))
         c = c->next;
-    if (!c && !(c = psp_rigid_build(r, inst, ni)))
+    if (!c && !(c = psp_rigid_build(r, inst, ni, pass)))
         return 0;
     const Mat4 *world = &inst->node_world[ni];
     float bounds[6];
@@ -171,18 +177,20 @@ static int psp_rigid_draw(const Renderer *r, Instance *inst, unsigned ni, int pa
     /* A state change must not affect triangles already collected by the CPU. */
     bt_flush();
     float key[11] = {0};
-    if (inst->plight)
+    if (!pass && inst->plight)
         memcpy(key, inst->plight + ni * 6, 6 * sizeof(float));
-    key[6] = inst->tint_scale;
-    key[7] = (float)(inst->tint_red | (inst->tint_mode << 1));
-    memcpy(key + 8, inst->tint_rgb, 3 * sizeof(float));
+    if (!pass) {
+        key[6] = inst->tint_scale;
+        key[7] = (float)(inst->tint_red | (inst->tint_mode << 1));
+        memcpy(key + 8, inst->tint_rgb, 3 * sizeof(float));
+    }
     /* show_light is stable during normal play; keep it part of validity. */
-    key[6] += r->show_light ? 0 : 4096;
+    key[6] += r->show_light || pass ? 0 : 4096;
     if (!c->color_valid || memcmp(key, c->color_key, sizeof key)) {
         struct ModelVertexCache *cache = model_cache_begin(inst->model->npoints);
         const float base[3] = {1, 1, 1};
         c->x2 = 0;
-        g_mat_blended = 0;
+        g_mat_blended = pass != 0;
         for (unsigned i = 0; i < c->count; i++) {
             unsigned point = c->point[i];
             if (c->material[i] & 0x8000)
@@ -233,7 +241,7 @@ static int psp_rigid_draw(const Renderer *r, Instance *inst, unsigned ni, int pa
         c->nruns = 0;
         for (unsigned k = 0; k < node->npolys; k++) {
             InsPoly *poly = &node->polys[k];
-            if (poly->nverts < 3)
+            if (poly->nverts < 3 || c->poly_first[k] == c->poly_first[k + 1])
                 continue;
             const float *plane = poly_plane(inst->model, node, poly);
             if (inverse && !(poly->flags & 2) &&

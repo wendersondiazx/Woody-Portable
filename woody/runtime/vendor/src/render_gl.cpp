@@ -14,6 +14,7 @@
 #include "player.h" /* volume_contains (0x4300c0) */
 #include "texpack.h"
 #include "gtao.h"
+#include "draw_buckets.hpp"
 #ifdef WOODY_PSP
 #include "psp_clip.h"
 static float psp_clip_planes[5][4];
@@ -129,17 +130,17 @@ int win_open(Window *w, const char *title, int width, int height) {
     g_win = w;
     WNDCLASSA wc = {0};
     wc.lpfnWndProc = wndproc;
-    wc.hInstance = GetModuleHandleA(NULL);
+    wc.hInstance = GetModuleHandleA(nullptr);
     wc.lpszClassName = "WoodyRE";
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hIcon = LoadIconA(wc.hInstance, MAKEINTRESOURCEA(1)); /* out/woody.rc, if linked in */
     wc.style = CS_OWNDC;
     RegisterClassA(&wc);
     RECT rc = {0, 0, width, height};
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
     HWND hwnd = CreateWindowA("WoodyRE", title, WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
-                              CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, NULL, NULL,
-                              wc.hInstance, NULL);
+                              CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, nullptr,
+                              nullptr, wc.hInstance, nullptr);
     if (!hwnd)
         return -1;
     HDC hdc = GetDC(hwnd);
@@ -175,7 +176,7 @@ void win_poll(Window *w) {
     MSG m;
     w->mouse_dx = w->mouse_dy = 0;
     w->raw_dx = w->raw_dy = 0;
-    while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) {
+    while (PeekMessageA(&m, nullptr, 0, 0, PM_REMOVE)) {
         TranslateMessage(&m);
         DispatchMessageA(&m);
     }
@@ -220,7 +221,7 @@ int win_vsync(int interval) {
     return f && f(interval) ? 0 : -1;
 }
 void win_close(Window *w) {
-    wglMakeCurrent(NULL, NULL);
+    wglMakeCurrent(nullptr, nullptr);
     wglDeleteContext((HGLRC)w->hglrc);
     ReleaseDC((HWND)w->hwnd, (HDC)w->hdc);
     DestroyWindow((HWND)w->hwnd);
@@ -610,7 +611,7 @@ static const float *lit_vpos(const Renderer *r, int32_t i, float tmp[3]) {
         tmp[2] = v->z;
     } else {
         uint32_t k = (uint32_t)(-i - 1);
-        Vec3 e = k < r->lit->nextra ? r->lit->extra[k] : (Vec3){0, 0, 0};
+        Vec3 e = k < r->lit->nextra ? r->lit->extra[k] : Vec3{0, 0, 0};
         tmp[0] = e.x;
         tmp[1] = e.y;
         tmp[2] = e.z;
@@ -806,8 +807,8 @@ int rnd_init(Renderer *r, TexFile *tex, GelFile *gel, InsFile *ins, const LitFil
     r->gel = gel;
     r->ins = ins;
     r->show_world = r->show_instances = r->show_light = 1;
-    r->lit = (lit && lit->nlights) ? lit : NULL;
-    r->vis = (vis && vis->nsectors == gel->nsectors) ? vis : NULL;
+    r->lit = (lit && lit->nlights) ? lit : nullptr;
+    r->vis = (vis && vis->nsectors == gel->nsectors) ? vis : nullptr;
     r->cull = gel->nsectors ? (r->vis ? 2 : 1) : 0;
     r->face_batch =
         (struct FaceBatch *)calloc(gel->npolys ? gel->npolys : 1, sizeof(struct FaceBatch));
@@ -1134,7 +1135,7 @@ static void world_visibility(Renderer *r, const FreeCamera *cam, const float pl[
     uint32_t npairs = 0;
     const VisList *E = r->race[0] != -1 && cs >= 0
                            ? vis_entry(r->vis, g, cam->pos)
-                           : NULL; /* 0x401c36: race list given and its first entry != -1 */
+                           : nullptr; /* 0x401c36: race list given and its first entry != -1 */
     if (E) {
         /* Race path of 0x42a980 (docs/RACE.md 2.1): the sectors are still every pair's first word
          * of the camera's .vis entry (0x408210: the entry whose id is the floor group under the
@@ -1300,7 +1301,7 @@ static int psp_clip_world(const Renderer *r, struct WorldBatch *b) {
                 void *p = realloc(psp_safe_scratch, count * sizeof *psp_safe_scratch);
                 if (!p)
                     return 1; /* Never submit unsafe geometry on allocation failure. */
-                psp_safe_scratch = p;
+                psp_safe_scratch = static_cast<GLushort *>(p);
                 psp_safe_capacity = count;
             }
             for (unsigned i = 0; i + 2 < count; i += 3) {
@@ -1341,7 +1342,7 @@ static int psp_clip_world(const Renderer *r, struct WorldBatch *b) {
                     void *p = realloc(psp_clip_scratch, next * sizeof *psp_clip_scratch);
                     if (!p)
                         return 1;
-                    psp_clip_scratch = p;
+                    psp_clip_scratch = static_cast<PspWorldVertex *>(p);
                     psp_clip_capacity = next;
                 }
                 for (unsigned t = 2; t < n; t++) {
@@ -1405,18 +1406,18 @@ static int psp_clip_world(const Renderer *r, struct WorldBatch *b) {
 /* the triangles of one batch that survived the visibility pass */
 static void batch_draw(const Renderer *r, const struct WorldBatch *b) {
 #ifdef WOODY_PSP
-    struct WorldBatch *mutable = (struct WorldBatch *)b;
-    if (psp_clip_world(r, mutable))
+    struct WorldBatch *mutable_batch = (struct WorldBatch *)b;
+    if (psp_clip_world(r, mutable_batch))
         return;
     unsigned n = b->ntris * 3;
     if (n && n <= 65535) {
-        if (!mutable->psp_vertices) {
+        if (!mutable_batch->psp_vertices) {
             struct Packed {
                 float u, v;
                 uint32_t color;
                 float x, y, z;
             };
-            struct Packed *p = malloc((size_t)n * sizeof *p);
+            struct Packed *p = static_cast<Packed *>(malloc((size_t)n * sizeof *p));
             if (!p) {
                 fprintf(stderr, "World vertex cache allocation failed\n");
                 return;
@@ -1431,25 +1432,25 @@ static void batch_draw(const Renderer *r, const struct WorldBatch *b) {
                 p[i].y = b->pos[3 * i + 1];
                 p[i].z = b->pos[3 * i + 2];
             }
-            glGenBuffersARB(1, &mutable->psp_vertices);
-            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable->psp_vertices);
+            glGenBuffersARB(1, &mutable_batch->psp_vertices);
+            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable_batch->psp_vertices);
             // GE can read RAM directly. Keep persistent geometry out of the
             // 2 MB VRAM budget used by display buffers and hot textures.
             glBufferDataARB(GL_ARRAY_BUFFER_ARB, (size_t)n * sizeof *p, p, GL_STREAM_DRAW_ARB);
             free(p);
         }
         if (glIsEnabled(GL_TEXTURE_2D)) {
-            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable->psp_vertices);
+            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable_batch->psp_vertices);
             glTexCoordPointer(2, GL_FLOAT, 24, (const void *)0);
             glColorPointer(4, GL_UNSIGNED_BYTE, 24, (const void *)8);
             glVertexPointer(3, GL_FLOAT, 24, (const void *)12);
         } else {
-            if (!mutable->psp_positions) {
-                glGenBuffersARB(1, &mutable->psp_positions);
-                glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable->psp_positions);
+            if (!mutable_batch->psp_positions) {
+                glGenBuffersARB(1, &mutable_batch->psp_positions);
+                glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable_batch->psp_positions);
                 glBufferDataARB(GL_ARRAY_BUFFER_ARB, (size_t)n * 12, b->pos, GL_STREAM_DRAW_ARB);
             }
-            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable->psp_positions);
+            glBindBufferARB(GL_ARRAY_BUFFER_ARB, mutable_batch->psp_positions);
             glVertexPointer(3, GL_FLOAT, 12, (const void *)0);
         }
         if (b->psp_clip_needed) {
@@ -1461,23 +1462,23 @@ static void batch_draw(const Renderer *r, const struct WorldBatch *b) {
         } else if (!r->cull)
             glDrawArrays(GL_TRIANGLES, 0, n);
         else if (b->nidx) {
-            if (!mutable->psp_indices || mutable->psp_idx_stamp != r->stamp_gen) {
-                GLushort *indices = malloc((size_t)b->nidx * 2);
+            if (!mutable_batch->psp_indices || mutable_batch->psp_idx_stamp != r->stamp_gen) {
+                GLushort *indices = static_cast<GLushort *>(malloc((size_t)b->nidx * 2));
                 if (!indices) {
                     glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
                     return;
                 }
                 for (unsigned i = 0; i < b->nidx; i++)
                     indices[i] = (GLushort)b->idx[i];
-                if (!mutable->psp_indices)
-                    glGenBuffersARB(1, &mutable->psp_indices);
-                glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, mutable->psp_indices);
+                if (!mutable_batch->psp_indices)
+                    glGenBuffersARB(1, &mutable_batch->psp_indices);
+                glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, mutable_batch->psp_indices);
                 glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB, (size_t)b->nidx * 2, indices,
                                 GL_STREAM_DRAW_ARB);
-                mutable->psp_idx_stamp = r->stamp_gen;
+                mutable_batch->psp_idx_stamp = r->stamp_gen;
                 free(indices);
             } else
-                glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, mutable->psp_indices);
+                glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, mutable_batch->psp_indices);
             glDrawElements(GL_TRIANGLES, b->nidx, GL_UNSIGNED_SHORT, (const void *)0);
             glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
         }
@@ -1525,7 +1526,7 @@ void rnd_film_frame(const Window *w, const uint16_t *px, int width, int height) 
             glDeleteTextures(1, &tex);
         tex = 0;
         free(rgb);
-        rgb = NULL;
+        rgb = nullptr;
         rgb_n = 0;
         return;
     }
@@ -1542,7 +1543,7 @@ void rnd_film_frame(const Window *w, const uint16_t *px, int width, int height) 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tw, th, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tw, th, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
     }
     size_t n = (size_t)width * height;
     if (n > rgb_n) {
@@ -1635,7 +1636,7 @@ void rnd_free(Renderer *r) {
     free(r->sec_prev);
     free(r->model_blend);
     free(r->links);
-    r->links = NULL;
+    r->links = nullptr;
     r->nlinks = r->links_cap = 0;
     free(r->list);
     free(r->list_sec);
@@ -1663,7 +1664,7 @@ void rnd_free(Renderer *r) {
                 glDeleteTextures(1, &id);
         }
         free(tg->gl_frames);
-        tg->gl_frames = NULL;
+        tg->gl_frames = nullptr;
         tg->gl_tex = 0;
     }
     memset(r, 0, sizeof *r);
@@ -1739,7 +1740,7 @@ static void bt_flush(void) {
     if (!g_bt.n)
         return;
 #ifdef WOODY_PSP
-    int profiling = wenv("WOODY_PROF") != NULL;
+    int profiling = wenv("WOODY_PROF") != nullptr;
     double batch_started = profiling ? win_time() : 0;
     if (profiling) {
         psp_batch_count++;
@@ -1796,7 +1797,7 @@ static void bt_flush(void) {
     static struct Packed *packed;
     static GLuint buffer;
     if (!packed)
-        packed = malloc(8190 * 7 * sizeof *packed);
+        packed = static_cast<Packed *>(malloc(8190 * 7 * sizeof *packed));
     if (!packed) {
         fprintf(stderr, "Dynamic vertex cache allocation failed\n");
         g_bt.n = 0;
@@ -2007,7 +2008,7 @@ static void set_material(
     /* GL state = (texture or none, blend mode). Every polygon has its own material record (a planar
      * projection), so the batch is keyed on the state, not on the material index: g_last_material
      * holds texture id + 1 (0 = untextured) | blend << 31 */
-    *mat_out = NULL;
+    *mat_out = nullptr;
     g_mat_blended = 0;
     uint32_t tex = 0;
     int bl = 0, key_bit = 0;
@@ -2127,7 +2128,8 @@ static void instance_light(const Renderer *r, Instance *inst, float dt) {
         return;
     }
     if (cache_light && !inst->psp_light_target)
-        inst->psp_light_target = calloc(m->nnodes ? m->nnodes : 1, 6 * sizeof(float));
+        inst->psp_light_target =
+            static_cast<float *>(calloc(m->nnodes ? m->nnodes : 1, 6 * sizeof(float)));
 #endif
     Vec3 p = ins_anim_centre(inst);
     p.y += 20.0f; /* inst+0x60, the animated root (issue #35) */
@@ -2165,14 +2167,14 @@ static void instance_light(const Renderer *r, Instance *inst, float dt) {
     inst->l_init = 1;
     if (!inst->plight || !inst->node_world)
         return;
-    const LitLight *L = chosen >= 0 ? &lf->lights[chosen] : NULL;
+    const LitLight *L = chosen >= 0 ? &lf->lights[chosen] : nullptr;
     for (uint32_t k = 0; k < m->nmesh_nodes; k++) {
         uint32_t ni = m->mesh_nodes[k] - 1;
         if (ni >= m->nnodes || m->nodes[ni].type_code == 2)
             continue; /* 0x43b6c2 */
         float *pl = &inst->plight[ni * 6];
 #ifdef WOODY_PSP
-        float *target = inst->psp_light_target ? inst->psp_light_target + ni * 6 : NULL;
+        float *target = inst->psp_light_target ? inst->psp_light_target + ni * 6 : nullptr;
         if (target) {
             memset(target, 0, 3 * sizeof(float));
             memcpy(target + 3, pl + 3, 3 * sizeof(float));
@@ -2211,7 +2213,7 @@ static void instance_light(const Renderer *r, Instance *inst, float dt) {
     }
 #ifdef WOODY_PSP
     inst->psp_light_revision = inst->pose_revision;
-    inst->psp_light_valid = cache_light && inst->psp_light_target != NULL;
+    inst->psp_light_valid = cache_light && inst->psp_light_target != nullptr;
 #endif
     if (wenv("WOODY_LITLOG") && inst->drawn && m->nmesh_nodes) {
         const float *pl = &inst->plight[(m->mesh_nodes[0] - 1) * 6]; /* testing: the first part */
@@ -2324,8 +2326,8 @@ static int link_inside(const Instance *v, Vec3 eye) /* 0x4300c0 on each volume n
 static void links_hide(Renderer *r, Vec3 eye) {
     static int log = -1;
     if (log < 0)
-        log = wenv("WOODY_LINKLOG") != NULL;
-    const Instance *last = NULL;
+        log = wenv("WOODY_LINKLOG") != nullptr;
+    const Instance *last = nullptr;
     int inside = 0, hidden = 0;
     for (uint32_t i = 0; i < r->nlinks; i++) {
         Instance *v = r->links[2 * i], *o = r->links[2 * i + 1];
@@ -2459,18 +2461,18 @@ static void chain_unlink(Renderer *r, Instance *in) {
         pp = &(*pp)->cell_next;
     if (*pp)
         *pp = in->cell_next;
-    in->cell_next = NULL;
+    in->cell_next = nullptr;
     in->chain_sec1 = 0;
 }
 /* the cell point of a clock run or an actor's own re-cell: an enemy's collision centre (0x4077f0 in
- * its mover), a flag-0x20 link its .ins position (the last explicit 0x4077f0(NULL)), everything
+ * its mover), a flag-0x20 link its .ins position (the last explicit 0x4077f0(nullptr)), everything
  * else the animated root inst+0x60 (the clock 0x43f2f1). An enemy whose mover has not run yet (the
  * bosses 13..16: no ground snap at PostLoad) is still in the cell the loader gave it, its .ins
  * position: the clock never re-cells flag 0x20. On its animated root the WWS Buzz (362, anim 0 =
  * cinematic track, root 2435 853 -4846) had no floor group, was never listed, never thought, so
  * never took the script's start (var 138) */
 static Vec3 cell_point(const Instance *in) {
-    return in->cell_dy > 0 ? (Vec3){in->position.x, in->position.y + in->cell_dy, in->position.z}
+    return in->cell_dy > 0 ? Vec3{in->position.x, in->position.y + in->cell_dy, in->position.z}
            : in->cell_fixed || (in->type >= 4 && in->type <= 16) ? in->position
                                                                  : ins_anim_centre(in);
 }
@@ -2483,10 +2485,11 @@ static int inst_flag20(const Instance *in) {
 static int inst_actor(const Instance *in) {
     return in->cell_dy > 0 || (inst_flag20(in) && !in->cell_fixed);
 }
-/* the point of 0x407790(NULL) / 0x4077f0(NULL): the .ins position +0xc. The loader (0x4288cf), a
- * show (message 6, 0x42d99b), the SetTypeInstance relink (0x403e7a, ebx = 0 from 0x403524) and the
- * bonus respawns (0x44f595, 0x44f8f5) all pass NULL; only a clock run (0x43f351) or an actor's
- * mover passes a point of its own. For the actors the port takes their mover's point. */
+/* the point of 0x407790(nullptr) / 0x4077f0(nullptr): the .ins position +0xc. The loader
+ * (0x4288cf), a show (message 6, 0x42d99b), the SetTypeInstance relink (0x403e7a, ebx = 0 from
+ * 0x403524) and the bonus respawns (0x44f595, 0x44f8f5) all pass nullptr; only a clock run
+ * (0x43f351) or an actor's mover passes a point of its own. For the actors the port takes their
+ * mover's point. */
 static Vec3 load_point(const Instance *in) {
     return inst_actor(in) ? cell_point(in) : in->position;
 }
@@ -2583,7 +2586,7 @@ static void chains_relink(Renderer *r) {
     qsort(buf, n, sizeof *buf, link_cmp);
     for (uint32_t i = 0; i < n; i++)
         if (buf[i]->visible)
-            chain_recell(r, buf[i], load_point(buf[i])); /* 0x403e7a: 0x407790(NULL) */
+            chain_recell(r, buf[i], load_point(buf[i])); /* 0x403e7a: 0x407790(nullptr) */
     r->link_done = top;
 }
 /* keep the chains in step with what happened since the last frame: 0x4288cf put every instance of
@@ -2606,7 +2609,7 @@ static void chains_sync(Renderer *r) {
             for (uint32_t k = 0; k < ins->models[mi].ninstances; k++) {
                 Instance *in = &ins->models[mi].instances[k];
                 in->chain_sec1 = 0;
-                in->cell_next = NULL;
+                in->cell_next = nullptr;
                 in->cell_ok = 0;
             }
         for (uint32_t mi = 0; mi < ins->nmodels; mi++)
@@ -2614,7 +2617,7 @@ static void chains_sync(Renderer *r) {
                 Instance *in = &ins->models[mi].instances[k];
                 if (in->visible)
                     chain_recell(r, in,
-                                 load_point(in)); /* 0x4288cf: 0x407790(NULL), in file order */
+                                 load_point(in)); /* 0x4288cf: 0x407790(nullptr), in file order */
             }
         chains_relink(r); /* then the level script's init 1200s */
         return;
@@ -2632,7 +2635,7 @@ static void chains_sync(Renderer *r) {
             if (!in->cell_ok) {
                 chain_recell(r, in, load_point(in));
                 continue;
-            } /* shown again: 0x407790(NULL) */
+            } /* shown again: 0x407790(nullptr) */
             if (!inst_actor(in))
                 continue; /* only its clock re-cells it */
             Vec3 ref = cell_point(in);
@@ -2658,7 +2661,7 @@ void rnd_instance_list(Renderer *r, const Window *w, const FreeCamera *cam, cons
     r->list_on = 1; /* 0x42a98f: +0x60 = 0 */
     /* 0x408210: the camera's .vis list */
     int32_t cs = gel_sector(g, cam->pos), cg = gel_floor_group(g, cam->pos);
-    const VisList *L = r->vis ? vis_entry(r->vis, g, cam->pos) : NULL;
+    const VisList *L = r->vis ? vis_entry(r->vis, g, cam->pos) : nullptr;
     int32_t ent = L ? (int32_t)(L - &r->vis->pool[r->vis->sectors[cs].first]) : -1;
     int all =
         !L || !r->list_sec ||
@@ -2744,10 +2747,10 @@ void rnd_instance_list(Renderer *r, const Window *w, const FreeCamera *cam, cons
     {
         int32_t leaf = gel_cell(g, cam->pos);
         uint32_t nref = 0;
-        const uint32_t *refs = leaf >= 0 ? gel_col_cell(g, (uint32_t)leaf, &nref) : NULL;
+        const uint32_t *refs = leaf >= 0 ? gel_col_cell(g, (uint32_t)leaf, &nref) : nullptr;
         for (uint32_t j = 0; j < nref; j++) {
             uint32_t idx = refs[j] & 0xffff;
-            Instance *in = idx < ins->nslots ? ins->slots[idx] : NULL;
+            Instance *in = idx < ins->nslots ? ins->slots[idx] : nullptr;
             if (in && in->visible && in->chain_sec1)
                 chain_clock(r, in, 0); /* 0x42e2c3: out of the world = no clock */
         }
@@ -3044,15 +3047,15 @@ static void lit_vertex_colour(const Renderer *r, const Instance *inst, const Mat
     Vec3 w = {0, 0, 0};
     float l = 0;
     if (g_idyn_n) {
-        w = (Vec3){a[0] * n.x + a[4] * n.y + a[8] * n.z, a[1] * n.x + a[5] * n.y + a[9] * n.z,
-                   a[2] * n.x + a[6] * n.y + a[10] * n.z};
+        w = Vec3{a[0] * n.x + a[4] * n.y + a[8] * n.z, a[1] * n.x + a[5] * n.y + a[9] * n.z,
+                 a[2] * n.x + a[6] * n.y + a[10] * n.z};
         l = sqrtf(w.x * w.x + w.y * w.y + w.z * w.z);
     }
     const Model *m = inst->model;
     if (ni < 0 && m->nmesh_nodes)
         ni = (int)m->mesh_nodes[0] - 1; /* a point no part owns: the first part's light */
     const float *pl =
-        ni >= 0 && (uint32_t)ni < m->nnodes && inst->plight ? &inst->plight[ni * 6] : NULL;
+        ni >= 0 && (uint32_t)ni < m->nnodes && inst->plight ? &inst->plight[ni * 6] : nullptr;
     float ndl = pl ? n.x * pl[0] + n.y * pl[1] + n.z * pl[2] : 0;
     if (ndl < 0)
         ndl = 0; /* the rest normal P+0x10 against the part's own vector (0x43bce4) */
@@ -3452,7 +3455,7 @@ static void sh_reset(void) /* a level is unloaded: every list belongs to it */
         free(g_rcv[i].d);
     }
     free(g_rcv);
-    g_rcv = NULL;
+    g_rcv = nullptr;
     g_nrcv = 0;
     for (uint32_t i = 0; i < g_nshcache; i++) {
         ShCache *c = &g_shcache[i];
@@ -3463,7 +3466,7 @@ static void sh_reset(void) /* a level is unloaded: every list belongs to it */
         free(c->proj);
     }
     free(g_shcache);
-    g_shcache = NULL;
+    g_shcache = nullptr;
     g_nshcache = g_shcache_cap = 0;
     if (++g_sh_gen == 0)
         g_sh_gen = 1; /* every Instance.sh_slot is stale */
@@ -3804,7 +3807,7 @@ static void draw_cast_shadows(const Renderer *r) {
                     printf("  SH t %.1f model %u inst %u type %d setflags %x caster %d vis %d fade "
                            "%.2f l_seen %d light %d nodes %d at %.0f %.0f %.0f",
                            g_tex_now, mi, k, inst->type, inst->setflags, caster, inst->visible,
-                           inst->fade, inst->l_seen, inst->light, inst->node_world != NULL,
+                           inst->fade, inst->l_seen, inst->light, inst->node_world != nullptr,
                            inst->world.m[12], inst->world.m[13], inst->world.m[14]),
                         puts("");
                 /* 0x42e2c3/0x42e377/0x42e417: no sector, fade >= 0.98 or an empty sector light list
@@ -3898,7 +3901,7 @@ static void event_frames(const Instance *inst, uint32_t out[4]) {
 static const float *poly_plane(Model *m, const InsNode *n, InsPoly *p) {
     if (!p->plane_ok) {
         float best = 0, nx = 1, ny = 0, nz = 0;
-        const InsPoint *rb = NULL;
+        const InsPoint *rb = nullptr;
         for (uint32_t i = 0; i < p->nverts; i++) {
             const InsPoint *P = &m->points[p->indices[i]],
                            *Q = &m->points[p->indices[(i + 1) % p->nverts]],
@@ -3933,7 +3936,7 @@ static const float *poly_plane(Model *m, const InsNode *n, InsPoly *p) {
 static void node_poly_uv(const Instance *inst, int helper, const Material *mat, Vec3 lp, Vec3 wp,
                          float *u, float *v) {
     const Model *m = inst->model;
-    const InsNode *h = helper >= 0 ? &m->nodes[helper] : NULL;
+    const InsNode *h = helper >= 0 ? &m->nodes[helper] : nullptr;
     Vec3 q;
     if (h && h->helper_a != 0 && h->helper_b != 0 &&
         affine_inv_apply(&inst->node_world[helper], wp, &q)) {
@@ -3972,9 +3975,10 @@ static struct ModelVertexCache *g_model_cache;
 static uint32_t g_model_cache_cap, g_model_cache_stamp;
 static struct ModelVertexCache *model_cache_begin(uint32_t count) {
     if (count > g_model_cache_cap) {
-        struct ModelVertexCache *p = realloc(g_model_cache, (size_t)count * sizeof *p);
+        struct ModelVertexCache *p =
+            static_cast<ModelVertexCache *>(realloc(g_model_cache, (size_t)count * sizeof *p));
         if (!p)
-            return NULL;
+            return nullptr;
         memset(p + g_model_cache_cap, 0, (count - g_model_cache_cap) * sizeof *p);
         g_model_cache = p;
         g_model_cache_cap = count;
@@ -4058,7 +4062,7 @@ static void draw_node_polys(const Renderer *r, Instance *inst, uint32_t ni, int 
                     argb1555_to_rgb(p->material, base);
                 if (mat || (p->material & 0x8000))
                     cached_lit_colour(cache, index, r, inst, &inst->node_world[ni], (int)ni, pt,
-                                      base, mat != NULL);
+                                      base, mat != nullptr);
             }
             bt_vertex(wp.x, wp.y, wp.z);
         }
@@ -4118,7 +4122,7 @@ static void draw_instance(const Renderer *r, Instance *inst,
                 continue;
             if (tr->material != last) {
                 bt_end();
-                set_material(r, tr->material, &mat, 0, NULL);
+                set_material(r, tr->material, &mat, 0, nullptr);
                 last = tr->material;
                 base[0] = base[1] = base[2] = 1;
                 if (tr->material & 0x8000)
@@ -4161,7 +4165,7 @@ static void draw_instance(const Renderer *r, Instance *inst,
                 InsPoint *pt = &m->points[idx[c]];
                 if (mat || (tr->material & 0x8000))
                     cached_lit_colour(cache, idx[c], r, inst, MM[c], own[idx[c]], pt, base,
-                                      mat != NULL);
+                                      mat != nullptr);
                 if (mat)
                     bt_texcoord(mat->m[6 - 3 * c],
                                 mat->m[7 - 3 * c]); /* explicit UVs: the material holds three UV
@@ -4206,7 +4210,7 @@ void rnd_uv_report(const Renderer *r, const Instance *inst) {
             if (seen)
                 continue;
             const Material *mat =
-                (mi & 0x8000) || mi >= r->tex->nmaterials ? NULL : &r->tex->materials[mi];
+                (mi & 0x8000) || mi >= r->tex->nmaterials ? nullptr : &r->tex->materials[mi];
             float u0 = 1e30f, u1 = -1e30f, v0 = 1e30f, v1 = -1e30f, span = 0;
             uint32_t np = 0;
             for (uint32_t q = k; q < n->npolys; q++) {
@@ -4699,7 +4703,7 @@ static double T[6];
 static int TN; /* WOODY_PROF */
 
 void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s) {
-    int model_view = wenv("WOODY_MODEL_VIEW") != NULL && r->perso != NULL;
+    int model_view = wenv("WOODY_MODEL_VIEW") != nullptr && r->perso != nullptr;
     int show_world = r->show_world;
     FreeCamera inspection;
     if (model_view) {
@@ -4723,12 +4727,12 @@ void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s
         float distance = 280;
         if (have_bounds) {
             centre =
-                (Vec3){(low.x + high.x) * 0.5f, (low.y + high.y) * 0.5f, (low.z + high.z) * 0.5f};
+                Vec3{(low.x + high.x) * 0.5f, (low.y + high.y) * 0.5f, (low.z + high.z) * 0.5f};
             distance =
                 fmaxf((high.y - low.y) * 1.6f, (high.x - low.x) * 1.2f) + (high.z - low.z) * 0.5f;
         }
         inspection = *cam;
-        inspection.pos = (Vec3){centre.x, centre.y, centre.z + distance};
+        inspection.pos = Vec3{centre.x, centre.y, centre.z + distance};
         inspection.yaw = 3.14159265f;
         inspection.pitch = 0;
         inspection.fov_deg = 45;
@@ -4799,8 +4803,8 @@ void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s
             if (p) {
                 Vec3 axis = p <= 2 ? rt : up;
                 float scale = (p <= 2 ? f / aspect : f) * (p & 1 ? 1 : -1);
-                n = (Vec3){fw.x * 4 + axis.x * scale, fw.y * 4 + axis.y * scale,
-                           fw.z * 4 + axis.z * scale};
+                n = Vec3{fw.x * 4 + axis.x * scale, fw.y * 4 + axis.y * scale,
+                         fw.z * 4 + axis.z * scale};
             }
             planes[p][0] = n.x;
             planes[p][1] = n.y;
@@ -4938,7 +4942,9 @@ void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s
                                                {{1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, -1}},
                                                {{-1, -1, -1}, {-1, 1, -1}, {-1, 1, 1}, {-1, -1, 1}},
                                                {{-1, 1, 1}, {-1, 1, -1}, {1, 1, -1}, {1, 1, 1}}};
-        const float S = 50000.0f, hu = r->sky_hu, hv = r->sky_hv,
+        // Depth testing does not disable the GE's far-plane clip. Keep every
+        // sky corner inside it when the player selects a shorter draw distance.
+        const float S = fminf(50000.0f, zf * 0.4f), hu = r->sky_hu, hv = r->sky_hv,
                     uv[4][2] = {{hu, hv}, {hu, 1 - hv}, {1 - hu, 1 - hv}, {1 - hu, hv}};
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
@@ -4955,7 +4961,7 @@ void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s
                 WoodyClipVertex in[3], out[9];
                 for (unsigned k = 0; k < 3; k++) {
                     unsigned c = triangles[t][k];
-                    in[k] = (WoodyClipVertex){
+                    in[k] = WoodyClipVertex{
                         {cam->pos.x + q[f][c][0] * S, cam->pos.y + q[f][c][1] * S,
                          cam->pos.z + q[f][c][2] * S, uv[c][0], uv[c][1], 1, 1, 1, 1}};
                 }
@@ -5086,7 +5092,7 @@ void rnd_frame(Renderer *r, const Window *w, const FreeCamera *cam, float time_s
                         continue; /* a fading instance's opaque parts go to the fade list below */
                     static int prof2 = -1;
                     if (prof2 < 0)
-                        prof2 = wenv("WOODY_PROF2") != NULL;
+                        prof2 = wenv("WOODY_PROF2") != nullptr;
                     if (!prof2) {
                         draw_instance(r, inst, 0);
                         draw_outline(r, inst);
@@ -5433,6 +5439,16 @@ void rnd_sorted(Renderer *r) {
         if (qb[i] > bmax)
             bmax = qb[i];
     }
+    // Build the sprite lists once instead of scanning every sprite in all 255 buckets.
+    static DrawBuckets<512> sprite_buckets;
+    const bool indexed_sprites = sprite_buckets.reset(static_cast<size_t>(nq));
+    if (indexed_sprites)
+        for (int i = 0; i < nq; i++) {
+            if (qb[i] < 0)
+                continue;
+            const int key = qb[i] > 0 ? (qk[i] & 1) : (qk[i] & 2);
+            sprite_buckets.append(static_cast<size_t>(qb[i] * 2 + (key ? 0 : 1)), i);
+        }
     if (wenv("WOODY_SORTLOG")) {
         static int fr;
         if (fr++ % 60 == 0) {
@@ -5520,7 +5536,10 @@ void rnd_sorted(Renderer *r) {
                 }
                 continue;
             }
-            for (int i = 0; i < nq; i++) {
+            const int list = b * 2 + (pass == 0 ? 0 : 1);
+            for (int i = indexed_sprites ? sprite_buckets.first(list) : 0;
+                 indexed_sprites ? i >= 0 : i < nq;
+                 i = indexed_sprites ? sprite_buckets.next(i) : i + 1) {
                 if (qb[i] != b)
                     continue;
                 int key =
@@ -5554,7 +5573,7 @@ void rnd_set_race(Renderer *r, const Trajectory *path) {
         gel_race_regions(r->gel, path->points, path->npoints,
                          r->race); /* 0x455f3d..0x455fed -> renderer+0xc0..+0xd4 */
     r->sec_dirty = 1;
-    r->race_entry = NULL;
+    r->race_entry = nullptr;
     if (wenv("WOODY_RACEVISLOG"))
         printf("  RACEVIS region list %d %d %d %d %d (%u points)\n", r->race[0], r->race[1],
                r->race[2], r->race[3], r->race[4], path ? path->npoints : 0);
@@ -5562,7 +5581,7 @@ void rnd_set_race(Renderer *r, const Trajectory *path) {
         for (uint32_t i = 0; i < path->npoints; i++) {
             Vec3 q = path->points[i];
             int32_t f = gel_floor_poly(r->gel, q);
-            const float *pl = f >= 0 ? r->gel->polys[f].plane : NULL;
+            const float *pl = f >= 0 ? r->gel->polys[f].plane : nullptr;
             printf("    point %2u (%.0f %.0f %.0f): floor group %d at y %.0f\n", i, q.x, q.y, q.z,
                    gel_floor_group(r->gel, q),
                    pl && pl[1] > 0 ? -(pl[0] * q.x + pl[2] * q.z + pl[3]) / pl[1] : q.y);

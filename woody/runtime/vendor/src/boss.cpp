@@ -272,7 +272,7 @@ static void behav_move(Enemy *e, Player *pl, float step, float dt) {
     if (step < 0)
         step = 0;
     Vec3 d = {cosf(e->ang) * step, 0, sinf(e->ang) * step};
-    if (enemy_common_move(e, pl, d, &b->knock[b->behav], (Vec3){0, 0, 0}, b->behav, dt))
+    if (enemy_common_move(e, pl, d, &b->knock[b->behav], Vec3{0, 0, 0}, b->behav, dt))
         return;
     if (b->behav == 0) { /* Wander OnBlocked 0x41c420 */
         float a = enemy_sensor_widest_free(e);
@@ -346,13 +346,13 @@ static void height_tick(Enemy *e, Player *pl, float dt) {
     game_msgmask(
         e->inst, 0x200,
         enemy_probe(
-            e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy0,
+            e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy0,
             &f0)); /* 0x410973: the probe at pos + h/2 (Press/In/UnPress), 0x410993 / 0x4109ab */
     if (b->grav) {
         float k = m1(e) ? 200.0f : 130.0f, feet = e->pos.y - k;
         int found;
         float gy;
-        enemy_probe(e, pl, (Vec3){e->pos.x, feet + h2, e->pos.z}, h2, &gy,
+        enemy_probe(e, pl, Vec3{e->pos.x, feet + h2, e->pos.z}, h2, &gy,
                     &found); /* 0x41a561 again, with the same probe at the feet */
         int on = found && gy >= feet - 0.5f;
         if (on)
@@ -378,9 +378,9 @@ static void height_tick(Enemy *e, Player *pl, float dt) {
         if (b->bob_down) {
             b->bob += s;
             if (b->bob >= b->bob_max) {
-                game_smoke_ring((Vec3){e->pos.x, e->pos.y - 50, e->pos.z}, (Vec3){0, 1, 0}, 0, 1.5f,
+                game_smoke_ring(Vec3{e->pos.x, e->pos.y - 50, e->pos.z}, Vec3{0, 1, 0}, 0, 1.5f,
                                 6.0f);
-                audio_fx(49, NULL, NULL);
+                audio_fx(49, nullptr, nullptr);
                 b->bob = b->bob_max;
                 b->bob_down = 0;
             }
@@ -419,7 +419,7 @@ static int cone_touch(const Enemy *e, const Player *pl) {
  * the other enemies) */
 static int bite(Enemy *e, Player *pl) {
     float dx = pl->pos.x - e->pos.x, dz = pl->pos.z - e->pos.z, l = sqrtf(dx * dx + dz * dz);
-    Vec3 d = l > 1e-3f ? (Vec3){dx / l, 0, dz / l} : (Vec3){0, 0, 0};
+    Vec3 d = l > 1e-3f ? Vec3{dx / l, 0, dz / l} : Vec3{0, 0, 0};
     if (player_hit(pl, B_BITE, d)) {
         player_kill(pl, 3);
         return 1;
@@ -477,15 +477,15 @@ static void anim_choose(Enemy *e, float dt) {
         b->st != 12) { /* 0x468e40 / 0x468e50: the 2D loop, started on the first active frame */
         b->active = 1;
         if (!b->loop_on) {
-            audio_fx(m1(e) ? 39 : 44, NULL, NULL);
+            audio_fx(m1(e) ? 39 : 44, nullptr, nullptr);
             b->loop_on = 1;
         }
     }
 }
 static void loop_stop(Enemy *e) {
     if (e->b.loop_on) {
-        audio_fx_stop(39, NULL, 0);
-        audio_fx_stop(44, NULL, 0);
+        audio_fx_stop(39, nullptr, 0);
+        audio_fx_stop(44, nullptr, 0);
         e->b.loop_on = 0;
     }
 } /* 0x468e20 */
@@ -591,7 +591,7 @@ void boss_init(Enemy *e) {
     b->y_high = in->position.y;
     b->mode = 0;
     b->mail_var = 0;
-    b->link = NULL;
+    b->link = nullptr;
     boss_reset(e);
     in->visible = 1; /* the factory hangs it in the world; the W1B script hides it 1 s later */
 }
@@ -603,7 +603,7 @@ int boss_take_damage(Enemy *e, const Vec3 *pt, int kind) /* vtbl[39] 0x40fe90 */
         return 0; /* high phase or still "hit": invulnerable */
     b->st = 9;
     e->hit_t = anim_len(e, m1(e) ? 8 : 25); /* vtbl[53]: AnimLen(8) = 2.1 s in W1B */
-    audio_fx(m1(e) ? 42 : 47, NULL, NULL);
+    audio_fx(m1(e) ? 42 : 47, nullptr, nullptr);
     if (m1(e))
         switch ((int)e->hp) { /* hp BEFORE the hit, table 0x410054 */
         case 1:
@@ -622,7 +622,7 @@ int boss_take_damage(Enemy *e, const Vec3 *pt, int kind) /* vtbl[39] 0x40fe90 */
             break;
         }
     else
-        game_explosion((Vec3){e->pos.x, e->pos.y + 400, e->pos.z});
+        game_explosion(Vec3{e->pos.x, e->pos.y + 400, e->pos.z});
     /* Enemy_TakeDamage 0x41adc0 with 1.0 whatever the attacker says: a knockback still running on
      * the active behaviour refuses the hit */
     if (b->knock[b->behav] > 0)
@@ -630,7 +630,7 @@ int boss_take_damage(Enemy *e, const Vec3 *pt, int kind) /* vtbl[39] 0x40fe90 */
     b->knock[b->behav] = state_len(e);
     if (pt && kind != 2)
         game_hit_star(*pt); /* 0x41adea: star 0x40c2d0 -> 0x4750e0 at pt; none for the special
-                               attack (2) or a blast (pt NULL, 0x41aeec) */
+                               attack (2) or a blast (pt nullptr, 0x41aeec) */
     e->hp -= 1.0f;
     printf("  BOSS %u hit, hp %.0f", e->inst->index, e->hp), puts("");
     return e->hp <= 0;
@@ -642,7 +642,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
     if (!b->y_low_ok) { /* PostLoad: the ground under the placement + 290 (0x41a2a0) */
         int found;
         float gy = player_ground_query(
-            pl, in, (Vec3){in->position.x, in->position.y + e->P.height * 0.5f, in->position.z},
+            pl, in, Vec3{in->position.x, in->position.y + e->P.height * 0.5f, in->position.z},
             &found);
         b->y_low = (found ? gy : in->position.y) + B_LOW;
         b->y_low_ok = 1;
@@ -702,7 +702,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         }
         b->grav = 0;
         chase_start(e, pl);
-        b->pl_prev = (Vec3){0, 0, 0};
+        b->pl_prev = Vec3{0, 0, 0};
         b->st = 3;
         break;
     case 3: { /* chase 0x40f0e9 */
@@ -720,7 +720,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                     b->st = 10;
                     break;
                 }
-                audio_fx(k ? 46 : 41, NULL, NULL);
+                audio_fx(k ? 46 : 41, nullptr, nullptr);
                 b->high = 1;
                 b->st = 0;
                 break;
@@ -733,7 +733,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                     L = 1e-3f;
                 b->home_save = e->home;
                 e->home =
-                    (Vec3){pl->pos.x + a.x / L * 1300.0f, b->y_low, pl->pos.z + a.z / L * 1300.0f};
+                    Vec3{pl->pos.x + a.x / L * 1300.0f, b->y_low, pl->pos.z + a.z / L * 1300.0f};
                 wander_start(e);
                 b->leash_save = e->P.leash;
                 e->P.leash = 1.0f;
@@ -815,9 +815,9 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
             b->t1d8 = B_LAND_T;
             b->st = 8;
             if (!m1(e))
-                game_smoke_ring((Vec3){e->pos.x, e->pos.y - 50, e->pos.z}, (Vec3){0, 1, 0}, 0, 1.5f,
+                game_smoke_ring(Vec3{e->pos.x, e->pos.y - 50, e->pos.z}, Vec3{0, 1, 0}, 0, 1.5f,
                                 6.0f);
-            audio_fx(k ? 45 : 40, NULL, NULL);
+            audio_fx(k ? 45 : 40, nullptr, nullptr);
         }
         e->want_ang = ang_to(e->pos, pl->pos);
         b->turn = B_TURN_C;
@@ -834,7 +834,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                 b->st = 10;
                 break;
             }
-            audio_fx(k ? 46 : 41, NULL, NULL);
+            audio_fx(k ? 46 : 41, nullptr, nullptr);
             game_cam_shake(1.5f);
             b->high = 0;
             b->t1d8 = B_LAND_T;
@@ -858,7 +858,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         }
         break;
     case 10: /* the player is beaten 0x40fcb1 */
-        audio_fx(k ? 48 : 43, NULL, NULL);
+        audio_fx(k ? 48 : 43, nullptr, nullptr);
         loop_stop(e);
         b->t1e0 = 4.0f;
         b->st = 11;
@@ -884,7 +884,7 @@ void boss_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
     }
     if (wenv("WOODY_BOSSHIT") && b->mode && !b->high && b->st == 3 && e->hit_t <= 0 &&
         dist_xz(e->pos, pl->pos) < 400.0f) /* testing: a peck as soon as he is low and near */
-        printf("  BOSSHIT test peck: %s", boss_take_damage(e, NULL, 0) ? "beaten" : "done"),
+        printf("  BOSSHIT test peck: %s", boss_take_damage(e, nullptr, 0) ? "beaten" : "done"),
             puts("");
     sync_link(e);
     game_boss_bar(1, (int)e->hp, (int)e->P.hp); /* 0x40fd82 */
@@ -905,7 +905,7 @@ void boss_frame_end(Enemy *e) {
     b->active = 0;
     int red = 0;
     if (b->st == 9 || b->st == 12) { /* the counter goes up once per drawn model: 8 red, 8 normal */
-        int nd = 1 + (b->link != NULL);
+        int nd = 1 + (b->link != nullptr);
         b->blink = (b->blink + nd) % 16;
         red = b->blink >= 1 && b->blink <= 8;
     }
@@ -915,7 +915,7 @@ void boss_frame_end(Enemy *e) {
 }
 
 void enemies_boss_msg(EnemySet *s, Instance *inst, int id, uint32_t arg, Instance *linked) {
-    Enemy *e = NULL;
+    Enemy *e = nullptr;
     for (int i = 0; i < s->n; i++)
         if (s->e[i].inst == inst && s->e[i].type >= 14 && s->e[i].type <= 16)
             e = &s->e[i];
@@ -1080,8 +1080,8 @@ static void ground_follow(
 {
     int found;
     float gy, h2 = e->P.height * 0.5f;
-    int on = enemy_probe(e, pl, (Vec3){e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy,
-                         &found); /* 0x41a561 */
+    int on =
+        enemy_probe(e, pl, Vec3{e->pos.x, e->pos.y + h2, e->pos.z}, h2, &gy, &found); /* 0x41a561 */
     e->vfall += e->P.fall_g * dt - 0.2f * e->vfall;
     e->pos.y -= e->vfall;
     if (found && e->pos.y <= gy) {
@@ -1111,9 +1111,9 @@ static const unsigned char g_pat15[16] = {0, 1, 2, 3, 1, 2, 3, 0,
 static const Player *g_b15_pl;
 static Vec3 frame_pt(const BossBState *b, float x, float y, float z) /* C + x R + y U + z W */
 {
-    return (Vec3){b->C.x + x * b->R.x + y * b->U.x + z * b->W.x,
-                  b->C.y + x * b->R.y + y * b->U.y + z * b->W.y,
-                  b->C.z + x * b->R.z + y * b->U.z + z * b->W.z};
+    return Vec3{b->C.x + x * b->R.x + y * b->U.x + z * b->W.x,
+                b->C.y + x * b->R.y + y * b->U.y + z * b->W.y,
+                b->C.z + x * b->R.z + y * b->U.z + z * b->W.z};
 }
 void boss15_reset(Enemy *e) /* vtbl[17] 0x40da50 (Enemy::Reset 0x41a010 first) */
 {
@@ -1143,8 +1143,8 @@ void boss15_reset(Enemy *e) /* vtbl[17] 0x40da50 (Enemy::Reset 0x41a010 first) *
             Instance *l = b->launch[i];
             if (!l)
                 continue;
-            link_face(l, (Vec3){s * b->R.x - c * b->W.x, 0,
-                                s * b->R.z - c * b->W.z}); /* row 1 (+0x34) points away from C */
+            link_face(l, Vec3{s * b->R.x - c * b->W.x, 0,
+                              s * b->R.z - c * b->W.z}); /* row 1 (+0x34) points away from C */
             link_place(l, frame_pt(b, 300.0f * s, 15.0f, -300.0f * c));
         }
     b->rec = -1;
@@ -1165,11 +1165,11 @@ void boss15_init(Enemy *e) {
     e->P.drop = e->P.rise = 10.0f; /* subtype 12, 0x41db5f (P+0x2c / 0x30 keep the default 10) */
     e->attackable = 1;
     e->ang = e->want_ang = start_angle(in);
-    b->W = (Vec3){cosf(e->ang), 0, sinf(e->ang)};
-    b->U = (Vec3){0, 1, 0};
-    b->R = (Vec3){b->W.z, 0, -b->W.x}; /* 0x41b860, then 0x46d320 */
-    b->C = (Vec3){in->position.x + b->W.x * 1300.0f, in->position.y,
-                  in->position.z + b->W.z * 1300.0f}; /* +0x20c (0x4a9860) */
+    b->W = Vec3{cosf(e->ang), 0, sinf(e->ang)};
+    b->U = Vec3{0, 1, 0};
+    b->R = Vec3{b->W.z, 0, -b->W.x}; /* 0x41b860, then 0x46d320 */
+    b->C = Vec3{in->position.x + b->W.x * 1300.0f, in->position.y,
+                in->position.z + b->W.z * 1300.0f}; /* +0x20c (0x4a9860) */
     b->mail_var = 0;
     boss15_reset(e);
 }
@@ -1178,7 +1178,7 @@ void boss15_init(Enemy *e) {
 static void crush_hit(Enemy *e, Player *pl, int i) {
     Vec3 c = e->bb.crush[i]->position;
     if (!pl->dead_kind && sphere_cyl(c, 200.0f, pl->pos, B_PL_R, player_body_height(pl)))
-        if (player_hit(pl, 1.0f, (Vec3){0, 0, 0}))
+        if (player_hit(pl, 1.0f, Vec3{0, 0, 0}))
             player_kill(pl, 3);  /* direction [0x53a4c0]: never written, so no push */
     game_bombs_crush(c, 200.0f); /* |bomb - crusher|^2 < 40000 (0x4a9890) */
 }
@@ -1206,7 +1206,7 @@ void boss15_blast(Enemy *e, Vec3 c, float r) /* vtbl[40] 0x40e800, no state or i
         }
     }
     ac_request(b, g_r15, 3);
-    audio_fx(47, NULL, NULL);
+    audio_fx(47, nullptr, nullptr);
     printf("  BOSS2 %u blast: hp %.0f", e->inst->index, e->hp), puts("");
 }
 int boss15_protects(const EnemySet *s) /* the Perso's Kill 0x44c110: any category-2 / subtype-12
@@ -1226,7 +1226,7 @@ void boss15_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                    (0x42b400) */
     if (dist3(e->pos, cam) >= e->P.active_d && e->hp > 0)
         return; /* Think 0x41a320: 3500 */
-    enemy_common_move(e, pl, (Vec3){0, 0, 0}, &e->knock_t, e->knock_dir, 2,
+    enemy_common_move(e, pl, Vec3{0, 0, 0}, &e->knock_t, e->knock_dir, 2,
                       dt); /* Enemy::Update 0x41a3e0: Stand's Tick = 0x41b2c0 (sweep r 50, up 10) */
     ground_follow(e, pl, dt);
     enemy_place(e); /* its vtbl[45] is empty */
@@ -1238,7 +1238,7 @@ void boss15_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         if (game_var_get(b->mail_var) == 4) {
             b->st = 2;
             ac_request(b, g_r15, 0);
-            audio_fx(44, NULL, NULL);
+            audio_fx(44, nullptr, nullptr);
             break;
         }
         /* fallthrough: the same taunts as state 4 */
@@ -1277,7 +1277,7 @@ void boss15_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                 crush_hit(e, pl, idx);
             } else if (b->t_up < b->up) { /* rising again */
                 if (b->t_up == 0) {
-                    audio_fx(38, NULL, NULL);
+                    audio_fx(38, nullptr, nullptr);
                     game_cam_shake(0.7f);
                 } /* the impact */
                 link_place(b->crush[idx], frame_pt(b, T[0], b->t_up / b->up * T[1], T[2]));
@@ -1290,7 +1290,7 @@ void boss15_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                     b->st = 3;
                     b->phase_flag = 0;
                 }
-                audio_fx(48, NULL, NULL);
+                audio_fx(48, nullptr, nullptr);
                 b->t_cycle = 0;
                 b->step = 0;
             } else { /* back on top: the next crusher of the row */
@@ -1328,7 +1328,7 @@ void boss15_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         if (f >= 1.0f) {
             b->t_intro = 0;
             b->st = 3;
-            audio_fx_stop(44, NULL, 0);
+            audio_fx_stop(44, nullptr, 0);
         }
         break;
     }
@@ -1416,19 +1416,19 @@ void boss16_reset(Enemy *e) /* vtbl[17] 0x40c8f0 (Enemy::Reset 0x41a010 first) *
               z = b->C.z + sinf(a) * b->radius; /* 2 pi / 7 (0x4a9744) */
         Instance *g;
         if ((g = b->grp[0][i]))
-            link_place(g, (Vec3){x, b->C.y, z}); /* the pads */
+            link_place(g, Vec3{x, b->C.y, z}); /* the pads */
         if ((g = b->grp[2][i])) {
-            link_place(g, (Vec3){x, b->C.y + 30.0f, z});
+            link_place(g, Vec3{x, b->C.y + 30.0f, z});
             g->visible = 0;
             b->glow_n[i] = 0;
             loop_anim0(g, now);
         } /* the columns: out of the world */
         if ((g = b->grp[1][i])) {
-            link_place(g, (Vec3){x, b->C.y + 30.0f, z});
+            link_place(g, Vec3{x, b->C.y + 30.0f, z});
             loop_anim0(g, now);
         }
         if ((g = b->grp[3][i])) {
-            link_place(g, (Vec3){x, b->C.y - b->depth[i], z});
+            link_place(g, Vec3{x, b->C.y - b->depth[i], z});
             g->visible = 1;
         } /* bottom on C.y; 0x40cb41 Recell 0x4077f0 = back in the world */
     }
@@ -1468,8 +1468,8 @@ int boss16_take_damage(Enemy *e, float dmg) /* vtbl[39] 0x40d480 */
     b->t298 = 0;
     b->st = 5;    /* 0x4a9760 */
     e->hp -= dmg; /* Enemy_TakeDamage 0x41adc0: his vtbl[53] is 0, so no knockback refuses it */
-    audio_fx_stop(66, NULL, 0);
-    audio_fx(65, NULL, NULL);
+    audio_fx_stop(66, nullptr, 0);
+    audio_fx(65, nullptr, nullptr);
     printf("  BOSS3 %u hit, hp %.0f", e->inst->index, e->hp), puts("");
     if (e->hp <= 0) {
         b->st = 7;
@@ -1515,7 +1515,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         return; /* list world+0x64 (0x42b400) */
     if (dist3(e->pos, cam) >= e->P.active_d && e->hp > 0)
         return; /* Think 0x41a320: 3000 */
-    enemy_common_move(e, pl, (Vec3){0, 0, 0}, &e->knock_t, e->knock_dir, 2,
+    enemy_common_move(e, pl, Vec3{0, 0, 0}, &e->knock_t, e->knock_dir, 2,
                       dt); /* Stand's Tick = 0x41b2c0 (sweep r 50, up 70: P+0x30 = 5000) */
     ground_follow(e, pl, dt);
     enemy_place(e);
@@ -1547,7 +1547,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         } else {
             b->st = 3;
             b->t29c = 0;
-            audio_fx(66, NULL, NULL);
+            audio_fx(66, nullptr, nullptr);
         }
         break;
     }
@@ -1568,7 +1568,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
         b->t2a0 += dt;
         col_light(col, 400.0f); /* 0x40cea4 */
         if (ac_len(in, g_r16, 3) * 0.62f < b->t2a0) {
-            audio_fx(67, NULL, NULL);
+            audio_fx(67, nullptr, nullptr);
             Vec3 o = {e->pos.x, e->pos.y + 150.0f, e->pos.z},
                  d = {pl->pos.x - o.x, 0, pl->pos.z - o.z}; /* 0x4a9754; flat */
             float l = sqrtf(d.x * d.x + d.z * d.z);
@@ -1576,7 +1576,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
                 d.x /= l;
                 d.z /= l;
             } else
-                d = (Vec3){0, 0, 1};
+                d = Vec3{0, 0, 1};
             Vec3 R = {d.z, 0, -d.x}; /* 0x46d320(d): rows R, up, d */
             static const float D[3][2] = {{0.70710677f, 0.70710677f},
                                           {-0.70710677f, 0.70710677f},
@@ -1584,7 +1584,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
             for (int k = 0; k < 3; k++) /* template 1, speed P+0x60, damage P+0x40, steer P+0x68,
                                            vertical P+0x70, visual P+0x74 */
                 game_enemy_shot_v(
-                    e, o, (Vec3){D[k][0] * R.x + D[k][1] * d.x, 0, D[k][0] * R.z + D[k][1] * d.z},
+                    e, o, Vec3{D[k][0] * R.x + D[k][1] * d.x, 0, D[k][0] * R.z + D[k][1] * d.z},
                     2000.0f, 4.0f, 0.1f, 30.0f, 30.0f, 3, 20);
             b->t298 = 0;
             b->st = 5;
@@ -1666,7 +1666,7 @@ void boss16_update(Enemy *e, Player *pl, Vec3 cam, float dt) {
  * never listed, so their class-90 think, the rising yellow motes of AMBIENT.md, would never run).
  */
 void enemies_boss_links(EnemySet *s, Instance *inst, int id, int group, Instance **li, int n) {
-    Enemy *e = NULL;
+    Enemy *e = nullptr;
     for (int i = 0; i < s->n; i++)
         if (s->e[i].inst == inst && (s->e[i].type == 15 || s->e[i].type == 16))
             e = &s->e[i];
@@ -1696,7 +1696,7 @@ void enemies_boss_links(EnemySet *s, Instance *inst, int id, int group, Instance
                 g->visible = 0;
             if (group == 3) { /* 0x40d6be: the lowest point of the model, rotated and scaled */
                 Mat4 w;
-                mat4_from_trs(&w, (Vec3){0, 0, 0}, g->quat, g->scale);
+                mat4_from_trs(&w, Vec3{0, 0, 0}, g->quat, g->scale);
                 const Model *m = g->model;
                 float lo = 0;
                 for (uint32_t k = 0; k < m->npoints; k++) {

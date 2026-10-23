@@ -65,7 +65,7 @@ static void tables(void) {
             (float)pow(g_cos[i], 8.0) * 0.5f; /* i / 128 * 128 = i, ^8.0 (0x4a9018), * 0.5 */
 }
 static Vec3 vsub(Vec3 a, Vec3 b) {
-    return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z};
+    return Vec3{a.x - b.x, a.y - b.y, a.z - b.z};
 }
 static float vlen(Vec3 a) {
     return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
@@ -74,7 +74,7 @@ static Water *water_of(const Instance *in) {
     for (int i = 0; i < g_nw; i++)
         if (g_w[i].inst == in)
             return &g_w[i];
-    return NULL;
+    return nullptr;
 }
 
 static const TexFile *g_tex; /* the level's .tex: which texture group the surface takes */
@@ -106,7 +106,7 @@ static Vec3 poly_normal(const Model *m, const InsPoly *p) {
         float l = vlen(c);
         if (l > bl) {
             bl = l;
-            best = (Vec3){c.x / l, c.y / l, c.z / l};
+            best = Vec3{c.x / l, c.y / l, c.z / l};
         }
     }
     return best;
@@ -206,14 +206,14 @@ static void build(Water *w, const TexFile *tex) {
         for (int i = 0; i < w->nc; i++) {
             float s = (float)i / (float)(w->nc - 1), t = (float)j / (float)(w->nr - 1);
             int k = j * w->nc + i;
-            w->v[k] = (Vec3){A.x + e1.x * s + e2.x * t, A.y + e1.y * s + e2.y * t + 10.0f,
-                             A.z + e1.z * s + e2.z * t}; /* 0x4a9750: 10 above the top face */
+            w->v[k] = Vec3{A.x + e1.x * s + e2.x * t, A.y + e1.y * s + e2.y * t + 10.0f,
+                           A.z + e1.z * s + e2.z * t}; /* 0x4a9750: 10 above the top face */
             w->uv[k][0] = s * w->len1 / w->cell;
             w->uv[k][1] = t * w->len2 / w->cell; /* the texture repeats every `cell` units */
             w->ph[k] = (float)(int)(crt_rnd() * 512.0f);
         }
-    w->centre = (Vec3){w->v[0].x + e2.x * 0.5f + e1.x * 0.5f, w->v[0].y + e2.y * 0.5f + e1.y * 0.5f,
-                       w->v[0].z + e2.z * 0.5f + e1.z * 0.5f};
+    w->centre = Vec3{w->v[0].x + e2.x * 0.5f + e1.x * 0.5f, w->v[0].y + e2.y * 0.5f + e1.y * 0.5f,
+                     w->v[0].z + e2.z * 0.5f + e1.z * 0.5f};
     in->noncollide = 1;           /* 0x473876: inst+8 |= 0x40 */
     w->wake_t = crt_rnd() * 5.0f; /* 0x4a9884 */
     w->ready = 1;
@@ -318,8 +318,7 @@ void water_update(float dt, struct Player *pl) {
             int ang = (int)(crt_rnd() * 512.0f); /* 0x499580 truncates */
             for (int e = 0; e < 64; e++)
                 if (!g_wake[e].on) {
-                    g_wake[e] =
-                        (Wake){p, {g_cos[ang & 511], 0, -g_cos[(ang + 128) & 511]}, 0, 0, 1};
+                    g_wake[e] = Wake{p, {g_cos[ang & 511], 0, -g_cos[(ang + 128) & 511]}, 0, 0, 1};
                     break;
                 }
             w->wake_t += crt_rnd() * 2.0f;
@@ -347,7 +346,7 @@ void water_update(float dt, struct Player *pl) {
             k->pos.z += k->dir.z * 0.1f * 300.0f; /* 0x4a986c = 300 u/s */
             for (int q = 0; q < 512; q++)
                 if (!g_mark[q].on) {
-                    g_mark[q] = (Mark){k->pos, 0, 1};
+                    g_mark[q] = Mark{k->pos, 0, 1};
                     break;
                 }
             k->acc -= 0.1f;

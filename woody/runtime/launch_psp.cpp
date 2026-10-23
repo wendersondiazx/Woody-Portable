@@ -6,12 +6,12 @@
 #include <string.h>
 #include <ctype.h>
 #include "audio.h"
+#include "engine.hpp"
 #include <malloc.h>
-PSP_MODULE_INFO("WoodyPSP", 0, 0, 7);
+PSP_MODULE_INFO("WoodyPSP", 0, 0, 8);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 PSP_MAIN_THREAD_STACK_SIZE_KB(256);
 PSP_HEAP_SIZE_KB(-2048);
-int woody_engine_main(int argc, char **argv);
 volatile int woody_quit;
 static volatile int callback_status;
 static int woody_exit_callback(int a, int b, void *p) {
@@ -24,7 +24,7 @@ static int woody_exit_callback(int a, int b, void *p) {
 static int callbacks(SceSize s, void *p) {
     (void)s;
     (void)p;
-    int cb = sceKernelCreateCallback("exit", woody_exit_callback, NULL);
+    int cb = sceKernelCreateCallback("exit", woody_exit_callback, nullptr);
     int result = cb < 0 ? cb : sceKernelRegisterExitCallback(cb);
     callback_status = result < 0 ? result : 1;
     if (result < 0) {
@@ -43,9 +43,9 @@ int main(void) {
     unsigned boot_free = sceKernelTotalFreeMemSize();
     unsigned boot_largest = sceKernelMaxFreeMemSize();
     struct mallinfo heap = mallinfo();
-    int t = sceKernelCreateThread("callbacks", callbacks, 0x11, 0x1000, 0, NULL);
+    int t = sceKernelCreateThread("callbacks", callbacks, 0x11, 0x1000, 0, nullptr);
     if (t >= 0) {
-        int started = sceKernelStartThread(t, 0, NULL);
+        int started = sceKernelStartThread(t, 0, nullptr);
         if (started < 0) {
             sceKernelDeleteThread(t);
             callback_status = started;
@@ -57,11 +57,11 @@ int main(void) {
         callback_status = t;
     }
     scePowerSetClockFrequency(333, 333, 166);
-    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stdout, nullptr, _IONBF, 0);
     freopen("woodypsp-errors.log", "w", stderr);
-    setvbuf(stderr, NULL, _IONBF, 0);
-    fprintf(stderr, "WoodyPSP r7: built %s %s; native PSPSDK GU; Eko stereo music\n", __DATE__,
-            __TIME__);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    fprintf(stderr, "WoodyPSP r8: built %s %s; C++17; native PSPSDK GU; Eko stereo music\n",
+            __DATE__, __TIME__);
     fprintf(stderr, "WoodyPSP boot: partition free=%u largest=%u CPU=%d bus=%d callbacks=%08x\n",
             boot_free, boot_largest, scePowerGetCpuClockFrequency(), scePowerGetBusClockFrequency(),
             (unsigned)callback_status);
@@ -76,9 +76,9 @@ int main(void) {
         return 1;
     }
     setenv("WOODY_FPSCAP", "60", 1);
-    setenv("WOODY_NO_MUSIC","1",1);
+    setenv("WOODY_NO_MUSIC", "1", 1);
     void *probe = malloc(24u * 1024u * 1024u);
-    int expanded = probe != NULL;
+    int expanded = probe != nullptr;
     if (probe) {
         *(volatile unsigned char *)probe = 0;
         free(probe);
@@ -91,8 +91,11 @@ int main(void) {
         char line[96], value[16];
         int setting;
         while (fgets(line, sizeof line, performance)) {
-            if (sscanf(line, "music=%d", &setting) == 1 && (setting==0||setting==1)) {
-                if(setting==0)setenv("WOODY_NO_MUSIC","1",1);else unsetenv("WOODY_NO_MUSIC");
+            if (sscanf(line, "music=%d", &setting) == 1 && (setting == 0 || setting == 1)) {
+                if (setting == 0)
+                    setenv("WOODY_NO_MUSIC", "1", 1);
+                else
+                    unsetenv("WOODY_NO_MUSIC");
             } else if (sscanf(line, "memory=%d", &setting) == 1 && setting == 32) {
                 setenv("WOODY_LOW_MEMORY", "1", 1);
             } else if (sscanf(line, "particles=%d", &setting) == 1 && setting >= 0 &&
@@ -162,6 +165,12 @@ int main(void) {
         setenv("WOODY_CAPTURE", "1", 1);
     }
     char level[32] = "House";
+    FILE *export_loading = fopen("woody-export-loading.flag", "rb");
+    if (export_loading) {
+        fclose(export_loading);
+        remove("woody-export-loading.flag");
+        setenv("WOODY_EXPORT_LOADING", "1", 1);
+    }
     FILE *level_file = fopen("woody-test-level.txt", "rb");
     if (level_file) {
         if (fgets(level, sizeof level, level_file)) {
@@ -199,7 +208,8 @@ int main(void) {
     }
     char camera_values[5][32];
     float camera[5];
-    char *args[32] = {"WoodyPSP", "data/Data", level, "--res", "480x272", "--aspect", "wide", NULL};
+    const char *args[32] = {"WoodyPSP", "data/Data", level,  "--res",
+                            "480x272",  "--aspect",  "wide", nullptr};
     int argc = 7;
     FILE *camera_file = fopen("woody-test-camera.txt", "rb");
     if (camera_file) {
@@ -210,7 +220,7 @@ int main(void) {
                 snprintf(camera_values[i], sizeof camera_values[i], "%f", (double)camera[i]);
                 args[argc++] = camera_values[i];
             }
-            args[argc] = NULL;
+            args[argc] = nullptr;
         }
         fclose(camera_file);
         remove("woody-test-camera.txt");
@@ -273,11 +283,11 @@ int main(void) {
         fclose(next);
         remove("woody-test-next.txt");
     }
-    args[argc] = NULL;
-    int result = woody_engine_main(argc, args);
+    args[argc] = nullptr;
+    int result = woody::run(argc, args);
     /* Engine load errors can return before its normal shutdown path. */
     audio_shutdown();
-    fflush(NULL); /* sceKernelExitGame bypasses libc's normal exit flushing. */
+    fflush(nullptr); /* sceKernelExitGame bypasses libc's normal exit flushing. */
     if (result) {
         pspDebugScreenInit();
         pspDebugScreenPrintf(

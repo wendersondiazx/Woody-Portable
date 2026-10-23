@@ -50,7 +50,7 @@ static uint32_t *ru32s(Rd *r, uint32_t n) {
 static const uint8_t *rraw(Rd *r, size_t n) {
     if (r->pos + n > r->size) {
         r->err = 1;
-        return NULL;
+        return nullptr;
     }
     const uint8_t *p = r->d + r->pos;
     r->pos += n;
@@ -61,7 +61,7 @@ static uint8_t *read_file(const char *path, size_t *size) {
     FILE *f = fopen(path, "rb");
     if (!f) {
         fprintf(stderr, "cannot open %s\n", path);
-        return NULL;
+        return nullptr;
     }
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
@@ -70,7 +70,7 @@ static uint8_t *read_file(const char *path, size_t *size) {
     if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
         fclose(f);
         free(buf);
-        return NULL;
+        return nullptr;
     }
     fclose(f);
     *size = (size_t)sz;
@@ -110,8 +110,10 @@ int tex_load(TexFile *t, const char *path) {
             tg->frame_count = 0;
             break;
         }
-        tg->ps2_palettes = calloc(tg->frame_count, sizeof *tg->ps2_palettes);
-        tg->ps2_frames = calloc(tg->frame_count, sizeof *tg->ps2_frames);
+        tg->ps2_palettes =
+            static_cast<const uint8_t **>(calloc(tg->frame_count, sizeof *tg->ps2_palettes));
+        tg->ps2_frames =
+            static_cast<const uint8_t **>(calloc(tg->frame_count, sizeof *tg->ps2_frames));
         unsigned w = tg->width, h = tg->height;
         fb = 0;
         do {
@@ -221,9 +223,8 @@ static int read_cells(Rd *r, GelCell *out, uint32_t n) {
 static void gel_build_queries(GelFile *g) {
     g->q = (struct GelQuery *)calloc(1, sizeof *g->q);
     g->q->stamp = (uint32_t *)calloc(g->npolys ? g->npolys : 1, 4);
-    g->q->off =
-        wenv("WOODY_NOKD") !=
-        NULL; /* fall back to scanning the whole level, to tell a tree bug from a collision bug */
+    g->q->off = wenv("WOODY_NOKD") != nullptr; /* fall back to scanning the whole level, to tell a
+                                                  tree bug from a collision bug */
     g->col = (struct GelCol *)calloc(1, sizeof *g->col);
     g->col->cstamp = (uint32_t *)calloc(g->ncells ? g->ncells : 1, 4);
     /* A kd leaf that lies above every sector root belongs to no sector, and a polygon can miss
@@ -501,7 +502,7 @@ int32_t gel_floor_group(const GelFile *g, Vec3 p) {
 const VisList *vis_entry(const VisFile *v, const GelFile *g, Vec3 p) {
     int32_t s = gel_sector(g, p); /* 0x40821a */
     if (!v || s < 0 || (uint32_t)s >= v->nsectors || !v->sectors[s].nlists)
-        return NULL;
+        return nullptr;
     int32_t grp = gel_floor_group(g, p); /* 0x408224 */
     const VisSector *S = &v->sectors[s];
     for (uint32_t e = 0; e < S->nlists; e++)
@@ -723,7 +724,7 @@ int gel_col_load(GelFile *g, const char *path) {
         return -1;
     free(C->first);
     free(C->refs);
-    C->first = C->refs = NULL;
+    C->first = C->refs = nullptr;
     C->have = 0;
     size_t size;
     uint8_t *d = read_file(path, &size);
@@ -768,7 +769,7 @@ gel_col_cell(const GelFile *g, uint32_t cell,
     const struct GelCol *C = g->col;
     *n = 0;
     if (!C || !C->have || cell >= g->ncells)
-        return NULL;
+        return nullptr;
     *n = C->first[cell + 1] - C->first[cell];
     return C->refs + C->first[cell];
 }
@@ -919,7 +920,7 @@ static void flood_link(const GelFile *g, struct GelCol *C, const FloodQ *q, cons
     for (int f = 0; f < 6; f++) {
         int32_t l = K->link[f];
         if (l < 0)
-            flood_link(g, C, q, NULL, 0, l, depth + 1);
+            flood_link(g, C, q, nullptr, 0, l, depth + 1);
         else if ((uint32_t)l < K->nnodes)
             flood_link(g, C, q, K->nodes + 16 * (size_t)l, K->nnodes - (uint32_t)l, 0, depth + 1);
     }
@@ -940,7 +941,7 @@ static uint32_t flood(const GelFile *g, const FloodQ *q) /* 0x40aa30 / 0x40a700 
     for (int f = 0; f < 6; f++) {
         int32_t l = K->link[f];
         if (l < 0)
-            flood_link(g, C, q, NULL, 0, l, 1);
+            flood_link(g, C, q, nullptr, 0, l, 1);
         else if ((uint32_t)l < K->nnodes)
             flood_link(g, C, q, K->nodes + 16 * (size_t)l, K->nnodes - (uint32_t)l, 0, 1);
     }
@@ -1077,7 +1078,7 @@ static int col_candidate(const struct GelCol *C, Instance *in, uint32_t id) {
 }
 uint32_t gel_col_instances(const GelFile *g, const InsFile *ins, const GelColRef **out) {
     struct GelCol *C = g->col;
-    *out = NULL;
+    *out = nullptr;
     if (!C || !ins)
         return 0;
     C->nout = 0;
@@ -1089,7 +1090,8 @@ uint32_t gel_col_instances(const GelFile *g, const InsFile *ins, const GelColRef
     }
     static int all = -1;
     if (all < 0)
-        all = wenv("WOODY_COLALL") != NULL; /* testing: the port's old selection (every instance) */
+        all = wenv("WOODY_COLALL") !=
+              nullptr; /* testing: the port's old selection (every instance) */
     if (!C->have || all ||
         g_col_all) { /* port fallback without a .col: every instance, model order */
         for (uint32_t mi = 0; mi < ins->nmodels; mi++)
@@ -1109,7 +1111,7 @@ uint32_t gel_col_instances(const GelFile *g, const InsFile *ins, const GelColRef
             continue;
         for (uint32_t j = C->first[cell]; j < C->first[cell + 1]; j++) {
             uint32_t ref = C->refs[j], slot = ref & 0xffff;
-            Instance *in = slot < ins->nslots ? ins->slots[slot] : NULL;
+            Instance *in = slot < ins->nslots ? ins->slots[slot] : nullptr;
             if (!col_candidate(C, in, ref))
                 continue;
             in->col_stamp = C->igen;
@@ -1816,7 +1818,7 @@ static Vec3 track_pos_cut(const InsNode *n, int anim, float frame) /* 0x43a660 *
 }
 int ins_camera_eval(const Instance *inst, int anim, float phase, Vec3 *eye, Vec3 *target) {
     const Model *m = inst->model;
-    const InsNode *cn = NULL, *tn = NULL;
+    const InsNode *cn = nullptr, *tn = nullptr;
     if (anim < 0 || (uint32_t)anim >= m->nanims)
         return 0;
     for (uint32_t i = 0; i < m->nnodes; i++) {
@@ -1841,7 +1843,7 @@ int ins_root_end(const Instance *inst, int anim, Vec3 *pos, Vec3 *forward) {
 }
 int ins_root_at(const Instance *inst, int anim, float phase, int base, Vec3 *pos, Vec3 *forward) {
     const Model *m = inst->model;
-    const InsNode *root = NULL;
+    const InsNode *root = nullptr;
     if (anim < 0 || (uint32_t)anim >= m->nanims || base < 0 || (uint32_t)base >= m->nanims)
         return 0;
     for (uint32_t i = 0; i < m->nnodes && !root; i++)
@@ -1860,8 +1862,8 @@ int ins_root_at(const Instance *inst, int anim, float phase, int base, Vec3 *pos
         q.z = -q.z;
     }
     mat4_from_trs(&A, p, q, one);
-    p = (Vec3){0, 0, 0};
-    q = (Quat){0, 0, 0, 1};
+    p = Vec3{0, 0, 0};
+    q = Quat{0, 0, 0, 1};
     track_pos(root, base, 0, &p);
     if (track_rot(root, base, 0, &q)) {
         q.x = -q.x;
@@ -1880,7 +1882,7 @@ int ins_root_at(const Instance *inst, int anim, float phase, int base, Vec3 *pos
         w[k] = mat4_apply(&WA, l);
     }
     *pos = w[0];
-    *forward = (Vec3){w[1].x - w[0].x, 0, w[1].z - w[0].z};
+    *forward = Vec3{w[1].x - w[0].x, 0, w[1].z - w[0].z};
     return 1;
 }
 

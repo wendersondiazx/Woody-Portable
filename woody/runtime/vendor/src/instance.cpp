@@ -231,8 +231,7 @@ static void traj_update(Instance *I, float now) /* 0x437da0 */
         acc += len;
         if (d <= acc) {
             float k = len > 1e-6f ? rem / len : 0;
-            I->position =
-                (Vec3){a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k};
+            I->position = Vec3{a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k};
             i0 = (int)i;
             i1 = (int)j;
             break;
@@ -256,16 +255,16 @@ static void traj_update(Instance *I, float now) /* 0x437da0 */
             Quat q; /* columns = R, F, U */
             if (t > 0) {
                 float r = sqrtf(t + 1) * 2;
-                q = (Quat){(m21 - m12) / r, (m02 - m20) / r, (m10 - m01) / r, r * 0.25f};
+                q = Quat{(m21 - m12) / r, (m02 - m20) / r, (m10 - m01) / r, r * 0.25f};
             } else if (m00 > m11 && m00 > m22) {
                 float r = sqrtf(1 + m00 - m11 - m22) * 2;
-                q = (Quat){r * 0.25f, (m01 + m10) / r, (m02 + m20) / r, (m21 - m12) / r};
+                q = Quat{r * 0.25f, (m01 + m10) / r, (m02 + m20) / r, (m21 - m12) / r};
             } else if (m11 > m22) {
                 float r = sqrtf(1 + m11 - m00 - m22) * 2;
-                q = (Quat){(m01 + m10) / r, r * 0.25f, (m12 + m21) / r, (m02 - m20) / r};
+                q = Quat{(m01 + m10) / r, r * 0.25f, (m12 + m21) / r, (m02 - m20) / r};
             } else {
                 float r = sqrtf(1 + m22 - m00 - m11) * 2;
-                q = (Quat){(m02 + m20) / r, (m12 + m21) / r, r * 0.25f, (m10 - m01) / r};
+                q = Quat{(m02 + m20) / r, (m12 + m21) / r, r * 0.25f, (m10 - m01) / r};
             }
             I->quat = q;
         }

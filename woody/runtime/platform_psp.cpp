@@ -32,13 +32,13 @@ FILE *plat_fopen(const char *path, const char *mode) {
     FILE *f = fopen(fixed, mode);
     if (f || mode[0] != 'r')
         return f;
-    char *save = NULL;
+    char *save = nullptr;
     if (fixed[0] == '/')
         strcpy(resolved, "/");
-    for (char *part = strtok_r(fixed, "/", &save); part; part = strtok_r(NULL, "/", &save)) {
+    for (char *part = strtok_r(fixed, "/", &save); part; part = strtok_r(nullptr, "/", &save)) {
         DIR *d = opendir(resolved[0] ? resolved : ".");
         if (!d)
-            return NULL;
+            return nullptr;
         struct dirent *entry;
         char name[256] = "";
         while ((entry = readdir(d))) {
@@ -51,7 +51,7 @@ FILE *plat_fopen(const char *path, const char *mode) {
         }
         closedir(d);
         if (!name[0] || strlen(resolved) + strlen(name) + 2 >= sizeof resolved)
-            return NULL;
+            return nullptr;
         if (resolved[0] && resolved[strlen(resolved) - 1] != '/')
             strcat(resolved, "/");
         strcat(resolved, name);
@@ -64,7 +64,7 @@ int plat_vsc_to_vk(int sc) {
 }
 void (*plat_gl_proc(const char *name))(void) {
     (void)name;
-    return NULL;
+    return nullptr;
 }
 void plat_message(const char *text, int warn) {
     fprintf(stderr, "%s: %s\n", warn ? "warning" : "info", text);
@@ -115,7 +115,7 @@ void win_poll(Window *w) {
 }
 GLenum woody_read_pixels_rgba(unsigned char *pixels) {
     /* The SDK GE transfer reads native RGB565; expand for the capture writer. */
-    unsigned short *native = malloc(480 * 272 * sizeof *native);
+    unsigned short *native = static_cast<short unsigned int *>(malloc(480 * 272 * sizeof *native));
     if (!native)
         return GL_OUT_OF_MEMORY;
     while (glGetError() != GL_NO_ERROR) {
@@ -138,7 +138,7 @@ void win_swap(Window *w) {
     static unsigned frame;
     ++frame;
     if ((frame == 120 || frame == 600) && getenv("WOODY_CAPTURE")) {
-        unsigned char *pixels = malloc(480 * 272 * 4);
+        unsigned char *pixels = static_cast<unsigned char *>(malloc(480 * 272 * 4));
         if (pixels) {
             while (glGetError() != GL_NO_ERROR) {
             }

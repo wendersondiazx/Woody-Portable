@@ -1,4 +1,4 @@
-param([switch]$ConfigureOnly)
+param([switch]$ConfigureOnly, [string]$PackageName = 'WoodyPSP-Studio-1.1.0')
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $qt=Join-Path $root '.toolchains/qt'
@@ -19,11 +19,12 @@ if (-not $ConfigureOnly) {
 }
 $batch=Join-Path $build 'build.cmd'
 [IO.File]::WriteAllLines($batch,$commands,[Text.Encoding]::Default)
-$buildProcess=Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c',"`"$batch`"" -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$build/build.log" -RedirectStandardError "$build/build-errors.log"
+$buildProcess=Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c',"`"$batch`"" -WindowStyle Hidden -PassThru -RedirectStandardOutput "$build/build.log" -RedirectStandardError "$build/build-errors.log"
+$buildProcess.WaitForExit()
 Get-Content "$build/build.log" -Tail 12
 if ($buildProcess.ExitCode) {Get-Content "$build/build-errors.log" -Tail 20;throw "Converter build failed ($($buildProcess.ExitCode))" }
 if ($ConfigureOnly) { exit 0 }
-$package=Join-Path $root 'dist/WoodyPSP-Studio-1.1.0'
+$package=Join-Path (Join-Path $root 'dist') $PackageName
 New-Item -ItemType Directory -Force $package | Out-Null
 Copy-Item "$build/WoodyConverter.exe" "$package/WoodyPSP-Studio.exe" -Force
 $redist=Get-ChildItem "$vs/VC/Redist/MSVC" -Directory | Where-Object Name -Match '^\d' | Sort-Object Name -Descending | Select-Object -First 1
@@ -31,7 +32,8 @@ $crt=Get-ChildItem "$($redist.FullName)/x64" -Directory -Filter '*.CRT' | Select
 if (-not $crt) { throw 'MSVC redistributable DLLs not found' }
 Copy-Item "$($crt.FullName)/*.dll" -Destination $package -Force
 Copy-Item "$($crt.FullName)/*.dll" -Destination $build -Force
-$deploy=Start-Process -FilePath "$qt/bin/windeployqt.exe" -ArgumentList '--release','--no-translations','--no-opengl-sw','--no-system-d3d-compiler','--no-compiler-runtime',"`"$package/WoodyPSP-Studio.exe`"" -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$build/deploy.log" -RedirectStandardError "$build/deploy-errors.log"
+$deploy=Start-Process -FilePath "$qt/bin/windeployqt.exe" -ArgumentList '--release','--no-translations','--no-opengl-sw','--no-system-d3d-compiler','--no-compiler-runtime',"`"$package/WoodyPSP-Studio.exe`"" -WindowStyle Hidden -PassThru -RedirectStandardOutput "$build/deploy.log" -RedirectStandardError "$build/deploy-errors.log"
+$deploy.WaitForExit()
 if ($deploy.ExitCode) {Get-Content "$build/deploy-errors.log";throw 'Qt deployment failed' }
 foreach ($dll in 'dxcompiler.dll','dxil.dll') {
     $shader=Join-Path ${env:ProgramFiles(x86)} "Windows Kits/10/Redist/D3D/x64/$dll"

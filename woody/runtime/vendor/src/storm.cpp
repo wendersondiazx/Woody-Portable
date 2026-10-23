@@ -67,11 +67,11 @@ static float g_rod_dt;
 
 static int log_on(void) {
     if (g_log < 0)
-        g_log = wenv("WOODY_STORMLOG") != NULL;
+        g_log = wenv("WOODY_STORMLOG") != nullptr;
     return g_log;
 }
 static Vec3 v3(float x, float y, float z) {
-    return (Vec3){x, y, z};
+    return Vec3{x, y, z};
 }
 static Vec3 vadd(Vec3 a, Vec3 b) {
     return v3(a.x + b.x, a.y + b.y, a.z + b.z);
@@ -99,7 +99,7 @@ static Zone *zone_of(const Instance *in) {
     for (int i = 0; i < g_nz; i++)
         if (g_z[i].inst == in)
             return &g_z[i];
-    return NULL;
+    return nullptr;
 }
 
 /* 0x46d320: an orthonormal frame around the direction w; u, v span the plane across it */
@@ -230,7 +230,7 @@ static Zone *zone_at(Vec3 p, Vec3 *top) {
             return z;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 static void bolt_spawn(Vec3 a, Vec3 b) /* 0x46def0: life 1.8 s */
@@ -300,7 +300,7 @@ void storm_update(float dt, Player *pl, int frozen) {
         int above = S.timer > 1.7f;
         S.timer -= dt;
         if (!(S.timer > 1.7f) && above) {
-            audio_fx(8, NULL, NULL);
+            audio_fx(8, nullptr, nullptr);
             if (log_on())
                 printf("STORM warning (thunder), strike in %.2f s\n", S.timer);
         }
@@ -447,7 +447,8 @@ static void bolt_draw(Bolt *o, const float *eye, float dt) /* 0x46d520 */
          * atan(2^(0x12/8 - 0x12%8)) = 45 deg), i.e. the plain square every other sprite uses; flags
          * 3 = camera facing + own colour, no flag 8 = additive ONE/ONE (0x4719c0). So the glow is
          * drawn exactly like this. */
-        hud_world_spr_mode(0x12, 6, &o->b.x, crt_rnd() * 20.0f + 25.0f, 0, glow, 0.7f, 3, NULL, 0);
+        hud_world_spr_mode(0x12, 6, &o->b.x, crt_rnd() * 20.0f + 25.0f, 0, glow, 0.7f, 3, nullptr,
+                           0);
     }
 }
 static void arc_draw(Arc *o, const float *eye, float dt) /* 0x46da00 */

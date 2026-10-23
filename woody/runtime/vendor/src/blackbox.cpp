@@ -198,7 +198,7 @@ static struct {
 static GLuint upload(const uint8_t *d, int w, int h,
                      int bpp) /* 0x480780: BGRA, bottom row first; 24 bit = opaque */
 {
-    uint8_t *px = malloc((size_t)w * h * 4);
+    uint8_t *px = static_cast<uint8_t *>(malloc((size_t)w * h * 4));
     GLuint t;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
@@ -584,15 +584,15 @@ static void steps_tick(
         B.steps_on = 1;
         B.step_t = 0;
         B.step_cur = 0;
-        audio_fx(25, NULL, NULL);
+        audio_fx(25, nullptr, nullptr);
     } else if (B.steps && B.dt > 0 && (B.step_t += B.dt) >= 0.3f) {
         B.step_t -= 0.3f;
         B.step_cur = g_step_next[B.step_cur];
-        audio_fx(25 + B.step_cur, NULL, NULL);
+        audio_fx(25 + B.step_cur, nullptr, nullptr);
     }
     if (!B.steps && B.steps_on) {
         for (int i = 25; i <= 28; i++)
-            audio_fx_stop(i, NULL, 0);
+            audio_fx_stop(i, nullptr, 0);
         B.steps_on = 0;
     }
     B.steps = 0;
@@ -616,11 +616,11 @@ static void hero_set_state(int st) /* 0x4866d0 */
         spr_dur(s, 0.2f);
         break;
     case 4:
-        audio_fx(32, NULL, NULL);
+        audio_fx(32, nullptr, nullptr);
         spr_dur(s, 0.15f);
         break; /* ducking */
     case 5:
-        audio_fx(21 + crt_mod(4), NULL, NULL);
+        audio_fx(21 + crt_mod(4), nullptr, nullptr);
         spr_dur(s, 0.55f);
         break; /* jump (0x48672e) */
     case 6:
@@ -631,11 +631,11 @@ static void hero_set_state(int st) /* 0x4866d0 */
         spr_dur(s, 1.0f);
         break;
     case 9:
-        audio_fx(34 + crt_mod(3), NULL, NULL);
+        audio_fx(34 + crt_mod(3), nullptr, nullptr);
         spr_dur(s, 0.4f);
         break; /* hit (0x486780) */
     case 10:
-        audio_fx(33, NULL, NULL);
+        audio_fx(33, nullptr, nullptr);
         spr_dur(s, 1.5f);
         break; /* last life gone */
     case 11:
@@ -890,7 +890,7 @@ static void hero_land(int hit, float oldy) /* 0x486860, after the falling step *
     } /* hard landing: frames 2..4 for 0.3 s */
     s->base = 0;
     jump_reset(s);
-    audio_fx(29 + crt_mod(3), NULL, NULL); /* 0x486a09 */
+    audio_fx(29 + crt_mod(3), nullptr, nullptr); /* 0x486a09 */
 }
 static void
 hero_bump(void) /* 0x486aa0: a jump that hits something falls from where it was the frame before */
@@ -987,7 +987,7 @@ static Spr *pool_alloc(void) /* 0x485450: the first free slot (the original has 
             B.pool[i].on = 1;
             return &B.pool[i].s;
         }
-    return NULL;
+    return nullptr;
 }
 static void pool_free(Spr *s) {
     ((Slot *)s)->on = 0;
@@ -1019,7 +1019,7 @@ static void pool_move(float py) /* 0x4854b0 */
                 set_bb(s, 0, 0, 0, 0);
                 spr_retype(s, T_STAR);
                 spr_dur(s, 0.2f);
-                audio_fx(37, NULL, NULL);
+                audio_fx(37, nullptr, nullptr);
             } else if (s->type == T_DYNAMITE)
                 set_pos(s, s->x + s->vx, s->y + s->vy); /* dynamite falls through everything */
         }
@@ -1029,7 +1029,7 @@ static void pool_move(float py) /* 0x4854b0 */
             spr_retype(s, T_BOOM);
             spr_dur(s, 0.8f);
             set_bb(s, 14, 10, 12, 12);
-            audio_fx(6, NULL, NULL);
+            audio_fx(6, nullptr, nullptr);
         }
     }
 }
@@ -1342,8 +1342,8 @@ buzz_fire(void) /* 0x487800: the shot, the rock and the dynamite leave his hands
             Z.armed = 1;
         if (s->frame != 6 || !Z.armed)
             return;
-        audio_fx(18, NULL, NULL);
-        if ((o = pool_alloc()) != NULL) {
+        audio_fx(18, nullptr, nullptr);
+        if ((o = pool_alloc()) != nullptr) {
             set_pos(o, s->x - 6, s->y - 20);
             o->vx = o->vy = 0;
             spr_dur(o, 15.0f);
@@ -1355,7 +1355,7 @@ buzz_fire(void) /* 0x487800: the shot, the rock and the dynamite leave his hands
         Z.armed = 0;
     } else if (st == 4 || st == 5) {
         if (s->frame == 0 && Z.armed) {
-            if ((o = pool_alloc()) != NULL) {
+            if ((o = pool_alloc()) != nullptr) {
                 if (st == 4) {
                     set_pos(o, s->x + 11, s->y - 1);
                     o->vx = o->vy = 0;
@@ -1430,7 +1430,7 @@ static void cage_blow(void) /* 0x484c30: five explosions over the cage */
         o->vx = o->vy = 0;
         spr_dur(o, k[i][2]);
         spr_retype(o, T_BOOM);
-        audio_fx(6, NULL, NULL);
+        audio_fx(6, nullptr, nullptr);
     }
 }
 static void potion_touch(void) /* 0x484b20 */
@@ -1616,7 +1616,7 @@ static int load_images(const char *path) /* the level bank's type-1 items (docs/
                 fseek(f, (long)size, SEEK_CUR);
                 continue;
             }
-            uint8_t *d = malloc(size);
+            uint8_t *d = static_cast<uint8_t *>(malloc(size));
             if (fread(d, 1, size, f) != size) {
                 free(d);
                 fclose(f);
@@ -1643,7 +1643,7 @@ int bb_init(const char *data_dir) /* 0x484420 */
     bb_free();
     snprintf(path, sizeof path, "%s/../Game/mask.bin",
              data_dir); /* 0x4887f6: \Game\mask.bin, 0xc0000 B */
-    B.mask = malloc(0xc0000);
+    B.mask = static_cast<uint8_t *>(malloc(0xc0000));
     if (!(f = fopen(path, "rb")) || fread(B.mask, 1, 0xc0000, f) != 0xc0000) {
         if (f)
             fclose(f);
@@ -1692,7 +1692,7 @@ void bb_free(void) {
             glDeleteTextures(1, &B.tex[i]);
     if (B.steps_on)
         for (int i = 25; i <= 28; i++)
-            audio_fx_stop(i, NULL, 0);
+            audio_fx_stop(i, nullptr, 0);
     free(B.mask);
     memset(&B, 0, sizeof B);
 }

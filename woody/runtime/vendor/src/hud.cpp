@@ -232,7 +232,7 @@ static int rck_walk(const char *path, unsigned want_mask, ItemCb cb) {
             }
             uint32_t size = rd32(ih);
             if (want_mask & (1u << type)) {
-                uint8_t *d = malloc(size ? size : 1);
+                uint8_t *d = static_cast<uint8_t *>(malloc(size ? size : 1));
                 if (fread(d, 1, size, f) != size) {
                     free(d);
                     fclose(f);
@@ -268,7 +268,7 @@ static GLuint upload(const uint8_t *rgba, int w, int h) {
      * their original alpha while cutting texel traffic and residency by 4x. */
     if (w >= 16 && h >= 8) {
         size_t count = (size_t)w * h;
-        uint8_t *indices = malloc(count), palette[1024];
+        uint8_t *indices = static_cast<uint8_t *>(malloc(count)), palette[1024];
         if (indices && woody_psp_palette(rgba, count, indices, palette)) {
             glColorTableEXT(GL_TEXTURE_2D, GL_RGBA, 256, GL_RGBA, GL_UNSIGNED_BYTE, palette);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_COLOR_INDEX8_EXT, w, h, 0, GL_COLOR_INDEX8_EXT,
@@ -375,7 +375,7 @@ static void common_item(int type, int index, const uint8_t *d, uint32_t size) {
             bpp = d[4] | d[5] << 8;
         if (w <= 0 || h <= 0 || size < 8 + (uint32_t)w * h * 4)
             return;
-        uint8_t *px = malloc((size_t)w * h * 4);
+        uint8_t *px = static_cast<uint8_t *>(malloc((size_t)w * h * 4));
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) {
                 const uint8_t *s = d + 8 + ((size_t)(h - 1 - y) * w + x) * 4;
@@ -390,10 +390,10 @@ static void common_item(int type, int index, const uint8_t *d, uint32_t size) {
         H.img_h[index - 61] = h;
         free(px);
     } else if (type == 2) {
-        H.str = realloc(H.str, (size_t)(index + 1) * sizeof *H.str);
+        H.str = static_cast<uint16_t **>(realloc(H.str, (size_t)(index + 1) * sizeof *H.str));
         H.nstr = index + 1;
         uint32_t n = size / 2;
-        uint16_t *s = calloc(n + 1, 2);
+        uint16_t *s = static_cast<uint16_t *>(calloc(n + 1, 2));
         memcpy(s, d, (size_t)n * 2);
         H.str[index] = s;
     }
@@ -417,10 +417,10 @@ static void level_item(int type, int index, const uint8_t *d, uint32_t size) {
         H.img_h[0] = kh;
     }
     if (type == 2) { /* level strings (0x43f440), the same pool format as bank 0 */
-        H.lstr = realloc(H.lstr, (size_t)(index + 1) * sizeof *H.lstr);
+        H.lstr = static_cast<uint16_t **>(realloc(H.lstr, (size_t)(index + 1) * sizeof *H.lstr));
         H.nlstr = index + 1;
         uint32_t n = size / 2;
-        uint16_t *s = calloc(n + 1, 2);
+        uint16_t *s = static_cast<uint16_t *>(calloc(n + 1, 2));
         memcpy(s, d, (size_t)n * 2);
         H.lstr[index] = s;
         return;
@@ -429,7 +429,7 @@ static void level_item(int type, int index, const uint8_t *d, uint32_t size) {
         size >= 8) { /* raw row order: file row 0 = v 0 = bottom of the cube face (docs/SKY.md) */
         int w = (int16_t)(d[0] | d[1] << 8), h = (int16_t)(d[2] | d[3] << 8);
         if (w > 0 && h > 0 && size >= 8 + (uint32_t)w * h * 4) {
-            uint8_t *px = malloc((size_t)w * h * 4);
+            uint8_t *px = static_cast<uint8_t *>(malloc((size_t)w * h * 4));
             for (int i = 0; i < w * h; i++) {
                 px[i * 4] = d[8 + i * 4 + 2];
                 px[i * 4 + 1] = d[8 + i * 4 + 1];
@@ -491,7 +491,7 @@ static void level_item(int type, int index, const uint8_t *d, uint32_t size) {
         H.nglyphs = 0;
         return;
     }
-    H.gl = malloc(H.nglyphs * sizeof *H.gl);
+    H.gl = static_cast<Glyph *>(malloc(H.nglyphs * sizeof *H.gl));
     memcpy(H.gl, d + 0x1c, H.nglyphs * 20);
     font_letters(d, H.gl, H.nglyphs, H.npages, H.psize, g_chr);
     const uint8_t *p = d + 0x1c + H.nglyphs * 20;
@@ -511,7 +511,7 @@ static void credits_item(int type, int index, const uint8_t *d, uint32_t size) {
     H.cf.n = n;
     H.cf.npages = np;
     H.cf.psize = ps;
-    H.cf.gl = malloc(n * sizeof *H.cf.gl);
+    H.cf.gl = static_cast<Glyph *>(malloc(n * sizeof *H.cf.gl));
     memcpy(H.cf.gl, d + 0x1c, n * 20);
     font_letters(d, H.cf.gl, n, np, ps, g_cchr);
     const uint8_t *p = d + 0x1c + n * 20;
@@ -1041,14 +1041,14 @@ static const uint16_t *hud_string(uint32_t ref) {
     uint32_t i = ref & 0xffff;
     if ((ref >> 24) == 0x7f) {
         if (!((int)i < g_npstr || (i >= 128 && i < 160)))
-            return NULL;
+            return nullptr;
         if (g_pstr[i].gen != g_font_gen)
             port_encode((int)i);
         return g_pstr[i].u;
     }
     if ((ref >> 24) == 1)
-        return (int)i < H.nlstr && H.lstr[i] ? H.lstr[i] : NULL; /* level bank (the credits) */
-    return (ref >> 24) == 0 && (int)i < H.nstr && H.str[i] ? H.str[i] : NULL;
+        return (int)i < H.nlstr && H.lstr[i] ? H.lstr[i] : nullptr; /* level bank (the credits) */
+    return (ref >> 24) == 0 && (int)i < H.nstr && H.str[i] ? H.str[i] : nullptr;
 }
 
 static int number_codes(uint16_t *out,
@@ -1604,7 +1604,7 @@ static int swarm_tick(float dt) /* 0x47c620 + 0x47c7c0 */
 /* ---- starting an animation
  * ---------------------------------------------------------------------------------- */
 /* 0x448510: kind 1..5 for types 30, 36, 35, 34, 37; screen = the pickup projected into the 640x480
- * HUD, NULL when it is off screen */
+ * HUD, nullptr when it is off screen */
 void hud_anim_pickup(int kind, const float *screen, int face) {
     if (!H.ok)
         return;
@@ -3071,7 +3071,8 @@ static void score_row(float off, const HudScoreRow *r, float row) /* 0x45c510 */
          0x000000ff); /* 0x45d1a0: the HUD's blue bar, 22 high */
     font_size(18.0f);
     const uint16_t *s40 = hud_string(40);
-    uint16_t sp[2] = {s40 && s40[0] ? s40[1] : 0, 0}; /* word [str40 + 2]: the space */
+    uint16_t sp[2] = {static_cast<uint16_t>(s40 && s40[0] ? s40[1] : 0),
+                      0}; /* word [str40 + 2]: the space */
     float wsp = font_measure(sp), ty = y + (22.0f - font_cell()) * 0.5f;
     row_reset();
     row_str(r->world);
@@ -3186,7 +3187,7 @@ static WQuad *wq_new(GLuint tex, int add) {
         int n = g_wqcap ? g_wqcap * 2 : 256;
         WQuad *q = (WQuad *)realloc(g_wq, (size_t)n * sizeof *q);
         if (!q)
-            return NULL;
+            return nullptr;
         g_wq = q;
         g_wqcap = n;
     }
@@ -3679,7 +3680,8 @@ static void plane_axes(const float *n, float *u,
 void hud_world_spr_mode(int mode, int image, const float *pos, float size, int rot,
                         const float *rgb, float alpha, int flags, const float *basis, int mirror) {
 #ifdef WOODY_PSP
-    if(!psp_fx_accept())return;
+    if (!psp_fx_accept())
+        return;
 #endif
     g_spr_pos[0] = pos[0];
     g_spr_pos[1] = pos[1];

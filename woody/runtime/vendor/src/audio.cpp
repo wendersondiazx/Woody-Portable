@@ -9,7 +9,7 @@
 #elif defined(WOODY_PSP)
 #include <pspaudio.h>
 #include <pspkernel.h>
-#define LOCK() sceKernelWaitSema(A.mx, 1, NULL)
+#define LOCK() sceKernelWaitSema(A.mx, 1, nullptr)
 #define UNLOCK() sceKernelSignalSema(A.mx, 1)
 #else
 #include <SDL.h>
@@ -282,7 +282,7 @@ static int stream_refill(Stream *s) { /* next chunk as stereo; 0 at the end of a
 static void stream_close_file(Stream *s) {
     if (s->f)
         fclose(s->f);
-    s->f = NULL;
+    s->f = nullptr;
     s->track = -1;
     s->paused = 0;
 }
@@ -304,7 +304,7 @@ static int stream_active(const Stream *s) {
 #ifdef WOODY_PSP
     return s->active;
 #else
-    return s->f != NULL;
+    return s->f != nullptr;
 #endif
 }
 
@@ -408,10 +408,13 @@ static int stream_open_file(Stream *s, int track, int loop) {
     s->f = vf;
     s->track = track;
     s->channels = vh[8] == 1 && vh[9] == 1 && vh[10] == 1 && vh[11] == 1 ? 2 : 1;
-    if(s->channels==2 && size%32) {stream_close_file(s);return 0;}
+    if (s->channels == 2 && size % 32) {
+        stream_close_file(s);
+        return 0;
+    }
     s->rate = rate;
-    printf("PSP music format: track=%d channels=%d interleave=%d rate=%u\n",track,
-           s->channels,s->channels==2?1024:0,(unsigned)rate);
+    printf("PSP music format: track=%d channels=%d interleave=%d rate=%u\n", track, s->channels,
+           s->channels == 2 ? 1024 : 0, (unsigned)rate);
     s->offset = 2048;
     s->nbytes = s->left = size;
     s->loop = loop;
@@ -427,7 +430,7 @@ static int stream_open_file(Stream *s, int track, int loop) {
     return 1;
 #if 0
     if (track < 0 || track >= 49 || !A.bf) return 0;
-    const BfFile *bf = NULL;
+    const BfFile *bf = nullptr;
     for (int i = 0; i < A.nbf; i++) if (!_stricmp(A.bf[i].path, k_tracks[track])) bf = &A.bf[i];
     if (!bf || bf->size <= 44) return 0;
     FILE *f = fopen(A.bf_path, "rb"); if (!f) return 0;
@@ -517,7 +520,7 @@ static void voice_targets(Voice *v, float *l, float *r) {
  * frame), and the 2D queue tail mgr+0x30 is cleared (0x46af35) */
 static void voice_free(Voice *v) {
     int n = (int)(v - A.v), k = v->next;
-    v->snd = NULL;
+    v->snd = nullptr;
     v->next = 0;
     if (A.last2d == n + 1)
         A.last2d = 0;
@@ -546,7 +549,7 @@ static void voice_unlink(Voice *v) {
             A.v[i].next = v->next;
     if (A.last2d == n + 1)
         A.last2d = 0;
-    v->snd = NULL;
+    v->snd = nullptr;
     v->next = 0;
 }
 
@@ -678,12 +681,12 @@ int audio_init(void) {
         return 0;
     WAVEFORMATEX wf = {WAVE_FORMAT_PCM, 2, MIX_RATE, MIX_RATE * 4, 4, 16, 0};
     InitializeCriticalSection(&A.cs);
-    A.ev = CreateEvent(NULL, FALSE, FALSE, NULL);
+    A.ev = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     A.m_sfx = 1.0f;
     A.m_mus = 0.7f;
     A.lright[0] = 1.0f;
     A.s[0].track = A.s[1].track = -1;
-    A.log = getenv("WOODY_SNDLOG") != NULL;
+    A.log = getenv("WOODY_SNDLOG") != nullptr;
     if (waveOutOpen(&A.wo, WAVE_MAPPER, &wf, (DWORD_PTR)A.ev, 0, CALLBACK_EVENT) !=
         MMSYSERR_NOERROR) {
         fprintf(stderr, "audio: waveOutOpen failed\n");
@@ -701,7 +704,7 @@ int audio_init(void) {
     A.offline = A.dump && getenv("WOODY_FIXDT");
     if (A.offline)
         return 0;
-    A.th = CreateThread(NULL, 0, audio_thread, NULL, 0, NULL);
+    A.th = CreateThread(nullptr, 0, audio_thread, nullptr, 0, nullptr);
     SetThreadPriority(A.th, THREAD_PRIORITY_TIME_CRITICAL);
     SetEvent(A.ev);
     return 0;
@@ -724,9 +727,9 @@ void audio_shutdown(void) {
     stream_close(&A.s[1]);
     if (A.dump)
         fclose(A.dump);
-    A.dump = NULL;
+    A.dump = nullptr;
     free(A.bf);
-    A.bf = NULL;
+    A.bf = nullptr;
     A.ok = 0;
 }
 #elif defined(WOODY_PSP)
@@ -846,14 +849,14 @@ int audio_init(void) {
     A.event_delay_us = 0;
     A.event_starts = A.event_max_us = 0;
     A.output_frames = A.late_blocks = 0;
-    A.mx = sceKernelCreateSema("Woody audio mixer", 0, 1, 1, NULL);
+    A.mx = sceKernelCreateSema("Woody audio mixer", 0, 1, 1, nullptr);
     if (A.mx < 0)
         return -1;
     A.m_sfx = 1.0f;
     A.m_mus = 0.7f;
     A.lright[0] = 1.0f;
     A.s[0].track = A.s[1].track = -1;
-    A.log = getenv("WOODY_SNDLOG") != NULL;
+    A.log = getenv("WOODY_SNDLOG") != nullptr;
     if (getenv("WOODY_AUDIODUMP"))
         A.dump = fopen(getenv("WOODY_AUDIODUMP"), "wb");
     A.offline = A.dump && getenv("WOODY_FIXDT");
@@ -868,22 +871,22 @@ int audio_init(void) {
     A.reserved = 1;
     A.channel = result;
     A.decoder = sceKernelCreateThread("Woody stream decoder", psp_stream_thread, 0x18, 64 * 1024,
-                                      THREAD_ATTR_USER | THREAD_ATTR_VFPU, NULL);
+                                      THREAD_ATTR_USER | THREAD_ATTR_VFPU, nullptr);
     if (A.decoder < 0) {
         result = A.decoder;
         goto fail;
     }
-    result = sceKernelStartThread(A.decoder, 0, NULL);
+    result = sceKernelStartThread(A.decoder, 0, nullptr);
     if (result < 0)
         goto fail;
     A.decoder_started = 1;
     A.thread = sceKernelCreateThread("Woody audio", psp_audio_thread, 0x12, 64 * 1024,
-                                     THREAD_ATTR_USER | THREAD_ATTR_VFPU, NULL);
+                                     THREAD_ATTR_USER | THREAD_ATTR_VFPU, nullptr);
     if (A.thread < 0) {
         result = A.thread;
         goto fail;
     }
-    result = sceKernelStartThread(A.thread, 0, NULL);
+    result = sceKernelStartThread(A.thread, 0, nullptr);
     if (result < 0)
         goto fail;
     printf("PSP audio: channel %d, %d Hz, %d frames/block, playback %.2fx\n", A.channel, MIX_RATE,
@@ -898,7 +901,7 @@ fail:
     A.quit = 1;
     if (A.decoder >= 0) {
         if (A.decoder_started)
-            sceKernelWaitThreadEnd(A.decoder, NULL);
+            sceKernelWaitThreadEnd(A.decoder, nullptr);
         sceKernelDeleteThread(A.decoder);
     }
     if (A.thread >= 0)
@@ -907,7 +910,7 @@ fail:
         sceAudioChRelease(A.channel);
     if (A.dump)
         fclose(A.dump);
-    A.dump = NULL;
+    A.dump = nullptr;
     sceKernelDeleteSema(A.mx);
     A.ok = 0;
     return -1;
@@ -918,11 +921,11 @@ void audio_shutdown(void) {
         return;
     A.quit = 1;
     if (A.decoder >= 0) {
-        sceKernelWaitThreadEnd(A.decoder, NULL);
+        sceKernelWaitThreadEnd(A.decoder, nullptr);
         sceKernelDeleteThread(A.decoder);
     }
     if (A.thread >= 0) {
-        sceKernelWaitThreadEnd(A.thread, NULL);
+        sceKernelWaitThreadEnd(A.thread, nullptr);
         sceKernelDeleteThread(A.thread);
         sceKernelDelayThread((2 * BLOCK * 1000000) / MIX_RATE + 1000);
         double seconds = (sceKernelGetSystemTimeWide() - A.audio_started) / 1000000.0;
@@ -946,9 +949,9 @@ void audio_shutdown(void) {
     stream_close(&A.s[1]);
     if (A.dump)
         fclose(A.dump);
-    A.dump = NULL;
+    A.dump = nullptr;
     free(A.bf);
-    A.bf = NULL;
+    A.bf = nullptr;
     A.ok = 0;
     sceKernelDeleteSema(A.mx);
 }
@@ -979,7 +982,7 @@ int audio_init(void) {
     A.m_mus = 0.7f;
     A.lright[0] = 1.0f;
     A.s[0].track = A.s[1].track = -1;
-    A.log = getenv("WOODY_SNDLOG") != NULL;
+    A.log = getenv("WOODY_SNDLOG") != nullptr;
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         fprintf(stderr, "audio: %s\n", SDL_GetError());
         return -1;
@@ -992,12 +995,12 @@ int audio_init(void) {
     want.samples = BLOCK;
     want.callback = sdl_fill;
     A.mx = SDL_CreateMutex();
-    A.dev = SDL_OpenAudioDevice(NULL, 0, &want, &got,
+    A.dev = SDL_OpenAudioDevice(nullptr, 0, &want, &got,
                                 0); /* no changes allowed: SDL converts to the device's format */
     if (!A.dev) {
         fprintf(stderr, "audio: %s\n", SDL_GetError());
         SDL_DestroyMutex(A.mx);
-        A.mx = NULL;
+        A.mx = nullptr;
         return -1;
     }
 #ifdef WOODY_PSP
@@ -1024,12 +1027,12 @@ void audio_shutdown(void) {
     stream_close(&A.s[1]);
     if (A.dump)
         fclose(A.dump);
-    A.dump = NULL;
+    A.dump = nullptr;
     free(A.bf);
-    A.bf = NULL;
+    A.bf = nullptr;
     A.ok = 0;
     SDL_DestroyMutex(A.mx);
-    A.mx = NULL;
+    A.mx = nullptr;
 }
 #endif
 
@@ -1052,8 +1055,8 @@ int audio_bank_load(int bank, const char *path) {
     }
     int count = (int)rd32(h + 8 + 0x18); /* type 0 items come first (docs/RCK.md) */
     Sound *snd = count >= 0 && count <= 65536
-                     ? calloc(count ? count : 1, sizeof *snd)
-                     : NULL; /* a damaged header: no bank rather than a NULL write */
+                     ? static_cast<Sound *>(calloc(count ? count : 1, sizeof *snd))
+                     : nullptr; /* a damaged header: no bank rather than a nullptr write */
     if (!snd) {
         fclose(f);
         return -1;
@@ -1074,14 +1077,14 @@ int audio_bank_load(int bank, const char *path) {
             fseek(f, size - 16, SEEK_CUR);
             continue;
         } /* rate 0: a voice that never ends (step 0) */
-        snd[i].pcm = malloc(nbytes ? nbytes : 2);
+        snd[i].pcm = static_cast<int16_t *>(malloc(nbytes ? nbytes : 2));
         if (!snd[i].pcm) {
             fseek(f, size - 16, SEEK_CUR);
             continue;
         }
         if (fread(snd[i].pcm, 1, nbytes, f) != nbytes) {
             free(snd[i].pcm);
-            snd[i].pcm = NULL;
+            snd[i].pcm = nullptr;
             count = i;
             break;
         }
@@ -1111,7 +1114,7 @@ void audio_bank_free(int bank) {
         }
     Sound *snd = A.bank[bank].snd;
     int count = A.bank[bank].count;
-    A.bank[bank].snd = NULL;
+    A.bank[bank].snd = nullptr;
     A.bank[bank].count = 0;
     UNLOCK();
     for (int i = 0; i < count; i++)
@@ -1123,7 +1126,7 @@ static Sound *sound_of(uint32_t ref) {
     uint32_t bank = ref >> 24, idx = ref & 0xffff;
     if (bank >= AUDIO_BANKS || ((ref >> 16) & 0xff) || (int)idx >= A.bank[bank].count ||
         !A.bank[bank].snd[idx].pcm)
-        return NULL;
+        return nullptr;
     return &A.bank[bank].snd[idx];
 }
 
@@ -1134,14 +1137,14 @@ float audio_duration(uint32_t ref) {
     return s && s->rate ? (float)s->frames / ((float)s->rate * PLAYBACK_SPEED) : 0.0f;
 }
 
-/* the voice a queued play parks behind (NULL = start at once):
+/* the voice a queued play parks behind (nullptr = start at once):
  * 2D: the newest 2D voice mgr+0x30, whatever it is (0x469cfb: every 2D Play sets it, queued or
  * not); 3D: the head of the owner's node list = its newest unqueued 3D voice (queue=0 pushes at the
  * front, 0x469fb1), then down its chain of queued nodes (+0x10) to the end (0x469eda..0x469fa2). */
 static Voice *queue_tail(const void *owner, int is3d) {
-    Voice *t = NULL;
+    Voice *t = nullptr;
     if (!is3d)
-        t = A.last2d ? &A.v[A.last2d - 1] : NULL;
+        t = A.last2d ? &A.v[A.last2d - 1] : nullptr;
     else if (owner)
         for (int n = 0; n < NVOICES; n++) {
             Voice *w = &A.v[n];
@@ -1150,7 +1153,7 @@ static Voice *queue_tail(const void *owner, int is3d) {
         }
     while (t && t->next && A.v[t->next - 1].snd)
         t = &A.v[t->next - 1];
-    return t && t->snd ? t : NULL;
+    return t && t->snd ? t : nullptr;
 }
 
 int audio_play_q(uint32_t ref, const void *owner, int queue, int loop, float vol, float f,
@@ -1164,12 +1167,12 @@ int audio_play_q(uint32_t ref, const void *owner, int queue, int loop, float vol
     float fade = A.next_fade;
     A.next_fade = 0; /* cleared by every Play (0x469c23) */
     if (s && s->frames) {
-        Voice *v = NULL;
+        Voice *v = nullptr;
         for (int n = 0; n < NVOICES && !v; n++)
             if (!A.v[n].snd)
                 v = &A.v[n];
         if (v) {
-            Voice *tail = queue ? queue_tail(owner, pos != NULL) : NULL;
+            Voice *tail = queue ? queue_tail(owner, pos != nullptr) : nullptr;
             memset(v, 0, sizeof *v);
             v->ref = ref;
             v->owner = owner;
@@ -1316,7 +1319,7 @@ void audio_stop_all(void) {
         return;
     LOCK();
     for (int n = 0; n < NVOICES; n++) {
-        A.v[n].snd = NULL;
+        A.v[n].snd = nullptr;
         A.v[n].next = A.v[n].wait = 0;
     }
     A.last2d = 0;
@@ -1393,16 +1396,16 @@ void audio_reverse_stereo(int on) {
  * docs/SOUND.md 4.2) */
 static const uint8_t *bf_dir(const uint8_t *p, const uint8_t *end, const char *prefix) {
     if (p + 4 > end)
-        return NULL;
+        return nullptr;
     uint32_t n = rd32(p);
     p += 4;
     for (uint32_t i = 0; i < n; i++) {
         if (p + 4 > end)
-            return NULL;
+            return nullptr;
         uint32_t nl = rd32(p);
         p += 4;
         if (nl > 40 || p + nl + 4 > end)
-            return NULL;
+            return nullptr;
         char path[64];
         snprintf(path, sizeof path, "%s/%.*s", prefix, (int)nl, (const char *)p);
         p += nl;
@@ -1411,18 +1414,18 @@ static const uint8_t *bf_dir(const uint8_t *p, const uint8_t *end, const char *p
         if (kind == 1) {
             p = bf_dir(p, end, path);
             if (!p)
-                return NULL;
+                return nullptr;
         } else if (kind == 2) {
             if (p + 12 > end)
-                return NULL;
-            A.bf = realloc(A.bf, (size_t)(A.nbf + 1) * sizeof *A.bf);
+                return nullptr;
+            A.bf = static_cast<BfFile *>(realloc(A.bf, (size_t)(A.nbf + 1) * sizeof *A.bf));
             snprintf(A.bf[A.nbf].path, sizeof A.bf[A.nbf].path, "%s", path);
             A.bf[A.nbf].size = rd32(p);
             A.bf[A.nbf].offset = rd32(p + 8);
             A.nbf++;
             p += 12;
         } else
-            return NULL;
+            return nullptr;
     }
     return p;
 }
@@ -1502,13 +1505,13 @@ int audio_pcm_open(int rate, int channels) {
     LOCK();
     if (!A.pcm.buf) {
         A.pcm.cap = MIX_RATE * 4;
-        A.pcm.buf = malloc((size_t)A.pcm.cap * 2 * sizeof *A.pcm.buf);
+        A.pcm.buf = static_cast<int16_t *>(malloc((size_t)A.pcm.cap * 2 * sizeof *A.pcm.buf));
     }
     A.pcm.head = A.pcm.count = 0;
     A.pcm.pos = 0;
     A.pcm.rate = rate;
     A.pcm.channels = channels;
-    A.pcm.on = A.pcm.buf != NULL;
+    A.pcm.on = A.pcm.buf != nullptr;
     UNLOCK();
     return A.pcm.on ? 0 : -1;
 }

@@ -8,12 +8,15 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <math.h>
+#include <sys/stat.h>
 
 extern volatile int woody_quit;
 static GLuint cover;
 static int attempted;
+static GLuint background;
+static char background_level[32];
 static void capture(const char *path) {
-    unsigned char *pixels = malloc(480 * 272 * 4);
+    unsigned char *pixels = static_cast<unsigned char *>(malloc(480 * 272 * 4));
     if (!pixels)
         return;
     if (woody_read_pixels_rgba(pixels)) {
@@ -77,26 +80,22 @@ static void text(float x, float y, float scale, const char *s) {
     }
     glEnd();
 }
-static void load_cover(void) {
-    if (attempted)
-        return;
-    attempted = 1;
-    FILE *f = fopen("data/presentation/cover.rgba", "rb");
-    if (!f) {
-        fprintf(stderr, "presentation: cover missing\n");
-        return;
-    }
+static GLuint load_image(const char *path) {
+    GLuint texture = 0;
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return 0;
     unsigned char head[12];
-    unsigned char *pixels = NULL;
+    unsigned char *pixels = nullptr;
     if (fread(head, 1, sizeof head, f) != sizeof head || memcmp(head, "WPIC", 4) || head[4] != 0 ||
         head[5] != 1 || head[6] != 0 || head[7] != 0 || head[8] != 0 || head[9] != 1 ||
         head[10] != 0 || head[11] != 0)
         goto done;
-    pixels = malloc(256 * 256 * 4);
+    pixels = static_cast<unsigned char *>(malloc(256 * 256 * 4));
     if (!pixels || fread(pixels, 1, 256 * 256 * 4, f) != 256 * 256 * 4)
         goto done;
-    glGenTextures(1, &cover);
-    glBindTexture(GL_TEXTURE_2D, cover);
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -105,10 +104,46 @@ static void load_cover(void) {
 done:
     free(pixels);
     fclose(f);
+    return texture;
+}
+static void load_cover(void) {
+    if (!attempted) {
+        attempted = 1;
+        cover = load_image("data/presentation/cover.rgba");
+    }
+}
+static void load_background(const char *level) {
+    if (!strcmp(level, background_level))
+        return;
+    glDeleteTextures(1, &background);
+    snprintf(background_level, sizeof background_level, "%s", level);
+    char path[128];
+    snprintf(path, sizeof path, "data/presentation/loading_%s.rgba", level);
+    background = load_image(path);
+    if (!background)
+        background = load_image("data/presentation/loading_House.rgba");
+}
+static void image_quad(GLuint texture, float x, float y, float w, float h, float alpha) {
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glColor4f(1, 1, 1, alpha);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0);
+    glVertex2f(x, y);
+    glTexCoord2f(1, 0);
+    glVertex2f(x + w, y);
+    glTexCoord2f(1, 1);
+    glVertex2f(x + w, y + h);
+    glTexCoord2f(0, 1);
+    glVertex2f(x, y + h);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
 }
 static void draw(const char *level, const char *stage, float progress, float alpha, float slide,
                  int boot) {
     load_cover();
+    if (!boot)
+        load_background(level);
     glViewport(0, 0, 480, 272);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDisable(GL_DEPTH_TEST);
@@ -139,41 +174,60 @@ static void draw(const char *level, const char *stage, float progress, float alp
     glEnd();
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    if (cover) {
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, cover);
-        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-        glColor4f(1, 1, 1, alpha);
-        float x = 8 - slide, y = 12, size = 248;
+    if (!boot) {
+        if (background)
+            image_quad(background, 0, 0, 480, 272, 1);
+        glColor4f(0, 0, 0, 0.72f);
         glBegin(GL_QUADS);
-        glTexCoord2f(0, 0);
-        glVertex2f(x, y);
-        glTexCoord2f(1, 0);
-        glVertex2f(x + size, y);
-        glTexCoord2f(1, 1);
-        glVertex2f(x + size, y + size);
-        glTexCoord2f(0, 1);
-        glVertex2f(x, y + size);
+        quad(0, 220, 480, 52);
         glEnd();
-        glDisable(GL_TEXTURE_2D);
+        glColor4f(1, 1, 1, 1);
+        text(20, 231, 1, "LOADING...");
+        glColor4f(0.3f, 0.3f, 0.3f, 1);
+        glBegin(GL_QUADS);
+        quad(20, 252, 440, 4);
+        glEnd();
+        glColor4f(1, 0.8f, 0.1f, 1);
+        glBegin(GL_QUADS);
+        quad(20, 252, 440 * fminf(1, fmaxf(0, progress)), 4);
+        glEnd();
+    } else {
+        if (cover) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, cover);
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            glColor4f(1, 1, 1, alpha);
+            float x = 8 - slide, y = 12, size = 248;
+            glBegin(GL_QUADS);
+            glTexCoord2f(0, 0);
+            glVertex2f(x, y);
+            glTexCoord2f(1, 0);
+            glVertex2f(x + size, y);
+            glTexCoord2f(1, 1);
+            glVertex2f(x + size, y + size);
+            glTexCoord2f(0, 1);
+            glVertex2f(x, y + size);
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        }
+        glColor4f(0.5f, 0.82f, 1, alpha);
+        text(282, boot ? 82 : 55, 1, boot ? "PORT POWERED BY" : "LOADING");
+        glColor4f(1, 0.81f, 0.2f, alpha);
+        text(282, boot ? 111 : 84, 2, boot ? "wendersondiazx" : level);
+        glColor4f(1, 1, 1, alpha);
+        text(282, boot ? 144 : 118, 1, boot ? "WOODY PSP R8" : stage);
+        glColor4f(0.12f, 0.24f, 0.35f, 1);
+        glBegin(GL_QUADS);
+        quad(282, 180, 176, 3);
+        glEnd();
+        float width = 176 * fminf(1, fmaxf(0, progress));
+        glColor4f(0.12f, 0.7f, 1, alpha);
+        glBegin(GL_QUADS);
+        quad(282, 180, width, 3);
+        glEnd();
+        glColor4f(0.5f, 0.62f, 0.72f, alpha);
+        text(282, 224, 1, "ALL PSP MODELS");
     }
-    glColor4f(0.5f, 0.82f, 1, alpha);
-    text(282, boot ? 82 : 55, 1, boot ? "PORT POWERED BY" : "LOADING");
-    glColor4f(1, 0.81f, 0.2f, alpha);
-    text(282, boot ? 111 : 84, 2, boot ? "wendersondiazx" : level);
-    glColor4f(1, 1, 1, alpha);
-    text(282, boot ? 144 : 118, 1, boot ? "WOODY PSP R7" : stage);
-    glColor4f(0.12f, 0.24f, 0.35f, 1);
-    glBegin(GL_QUADS);
-    quad(282, 180, 176, 3);
-    glEnd();
-    float width = 176 * fminf(1, fmaxf(0, progress));
-    glColor4f(0.12f, 0.7f, 1, alpha);
-    glBegin(GL_QUADS);
-    quad(282, 180, width, 3);
-    glEnd();
-    glColor4f(0.5f, 0.62f, 0.72f, alpha);
-    text(282, 224, 1, "ALL PSP MODELS");
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -214,4 +268,41 @@ void woody_presentation_free(void) {
         glDeleteTextures(1, &cover);
     cover = 0;
     attempted = 0;
+    glDeleteTextures(1, &background);
+    background = 0;
+    background_level[0] = 0;
+}
+void woody_presentation_export_scene(const char *level) {
+    static const bool enabled = getenv("WOODY_EXPORT_LOADING") != nullptr;
+    if (!enabled)
+        return;
+    static char exported[32];
+    if (!strcmp(exported, level))
+        return;
+    auto *pixels = static_cast<unsigned char *>(malloc(480 * 272 * 4));
+    if (!pixels)
+        return;
+    if (!woody_read_pixels_rgba(pixels)) {
+        mkdir("data/presentation", 0777);
+        char path[128];
+        snprintf(path, sizeof path, "data/presentation/loading_%s.rgba", level);
+        FILE *file = fopen(path, "wb");
+        if (file) {
+            const unsigned char header[12] = {'W', 'P', 'I', 'C', 0, 1, 0, 0, 0, 1, 0, 0};
+            bool ok = fwrite(header, 1, sizeof header, file) == sizeof header;
+            unsigned char row[256 * 4];
+            for (int y = 0; y < 256 && ok; y++) {
+                const int sy = 271 - y * 272 / 256;
+                for (int x = 0; x < 256; x++)
+                    memcpy(row + x * 4, pixels + (sy * 480 + x * 480 / 256) * 4, 4);
+                ok = fwrite(row, 1, sizeof row, file) == sizeof row;
+            }
+            ok = fclose(file) == 0 && ok;
+            if (ok) {
+                snprintf(exported, sizeof exported, "%s", level);
+                printf("PSP loading scene exported: %s\n", level);
+            }
+        }
+    }
+    free(pixels);
 }

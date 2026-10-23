@@ -153,9 +153,10 @@ class Window final : public QMainWindow {
     }
 
   public:
-    Window(const QString& languageOverride={}) {
+    Window(const QString &languageOverride = {}) {
         QSettings saved("Wendersondiazx", "WoodyPSPStudio");
-        pt = (languageOverride.isEmpty()?saved.value("language", "en").toString():languageOverride) == "pt";
+        pt = (languageOverride.isEmpty() ? saved.value("language", "en").toString()
+                                         : languageOverride) == "pt";
         setWindowTitle(QString("Woody PSP Studio %1 | Wendersondiazx").arg(WOODY_STUDIO_VERSION));
         resize(1100, 860);
         setMinimumSize(900, 700);
@@ -168,7 +169,7 @@ class Window final : public QMainWindow {
         auto *brand = new QLabel("WOODY <span style='color:#54dbd0'>PSP STUDIO</span>");
         brand->setObjectName("brand");
         head->addWidget(brand, 1);
-        auto *version = new QLabel(QString("v%1 · runtime r7").arg(WOODY_STUDIO_VERSION));
+        auto *version = new QLabel(QString("v%1 · runtime r8").arg(WOODY_STUDIO_VERSION));
         version->setObjectName("muted");
         head->addWidget(version);
         language = new QComboBox;
@@ -347,6 +348,14 @@ class Window final : public QMainWindow {
         setStyleSheet(
             "QWidget{background:#101822;color:#e5edf7;font:13px 'Segoe UI';} "
             "QLabel,QCheckBox{background:transparent;} "
+            "QCheckBox{spacing:9px;} "
+            "QCheckBox::indicator{width:18px;height:18px;border:2px solid #91a6bd;"
+            "border-radius:4px;background:#0c131d;} "
+            "QCheckBox::indicator:hover{border-color:#54dbd0;} "
+            "QCheckBox::indicator:checked{background:#54dbd0;border-color:#54dbd0;"
+            "image:url(:/ui/checkmark.xpm);} "
+            "QCheckBox::indicator:disabled{border-color:#536477;background:#26374b;} "
+            "QCheckBox:focus{outline:1px solid #54dbd0;} "
             "QLabel#brand{font-size:30px;font-weight:800;letter-spacing:1px;} "
             "QLabel#subtitle{color:#a8b9ce;font-size:14px;} QLabel#muted{color:#91a6bd;} "
             "QLabel#audioNote{color:#e6c38e;padding:12px;background:#252529;border-radius:8px;} "
@@ -446,8 +455,17 @@ int main(int argc, char **argv) {
         }
     }
     QApplication app(argc, argv);
+    app.setApplicationName("Woody PSP Studio");
+    app.setApplicationVersion(WOODY_STUDIO_VERSION);
+#ifdef WOODY_APP_ICON
+    app.setWindowIcon(QIcon(":/ui/assets/woody-icon.png"));
+#endif
     app.setStyle("Fusion");
-    Window w;
+    QString languageOverride;
+    for (int i = 1; i + 1 < argc; i++)
+        if (QString::fromLocal8Bit(argv[i]) == "--language")
+            languageOverride = QString::fromLocal8Bit(argv[i + 1]);
+    Window w(languageOverride);
     w.show();
     for (int i = 1; i + 1 < argc; i++)
         if (QString::fromLocal8Bit(argv[i]) == "--preview") {

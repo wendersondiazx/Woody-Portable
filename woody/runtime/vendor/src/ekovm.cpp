@@ -66,6 +66,7 @@ int eko_load(EkoVM *vm, const void *data, size_t size) {
     memcpy(vm->w, data, vm->nwords * 4);
     uint32_t *w = vm->w;
     const size_t n = vm->nwords;
+    uint32_t p = w[5];
     vm->compiler_version = w[vm->nwords - 1];
     if (vm->compiler_version != 6)
         warn(vm, "Conflit: compiler version != 6");
@@ -76,7 +77,6 @@ int eko_load(EkoVM *vm, const void *data, size_t size) {
     vm->base = w[3] + vm->nobj; /* 0x5d0534 */
     /* variables: 8-byte entries then [count][ids] lists (0x5d0540) */
     vm->nvars = w[4];
-    uint32_t p = w[5];
     if (!span_ok(n, p, (uint64_t)vm->nvars * 2))
         goto bad;
     vm->varval = (int32_t *)calloc((size_t)vm->nvars + 1, sizeof(int32_t));
@@ -105,7 +105,8 @@ int eko_load(EkoVM *vm, const void *data, size_t size) {
     {
         const char *s = (const char *)(w + p + vm->nstr), *end = (const char *)(w + n);
         for (uint32_t i = 0; i < vm->nstr; i++) {
-            const char *z = s < end ? memchr(s, 0, (size_t)(end - s)) : NULL;
+            const char *z =
+                static_cast<const char *>(s < end ? memchr(s, 0, (size_t)(end - s)) : nullptr);
             if (!z)
                 goto bad;
             vm->str[i] = s;
@@ -233,7 +234,7 @@ static EkoActorEntry *list_find(EkoActorEntry *e, uint32_t actor) {
     for (; e; e = e->next)
         if (e->actor == actor)
             return e;
-    return NULL;
+    return nullptr;
 }
 
 /* ------------------------------------------------------------------ volumes (engine -> VM) */
