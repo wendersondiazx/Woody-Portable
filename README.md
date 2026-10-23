@@ -19,7 +19,7 @@
 
 **Woody PSP Studio 1.1.0 beta · engine r8**
 
-The engine is adapted from [WoodyRE](https://github.com/jjmhalew/WoodyRE) and uses PSPSDK directly. The PSP code is C++17; the converter is C++20 with Qt Widgets. Game assets and disc images are not included.
+The engine uses PSPSDK directly. The PSP code is C++17; the converter is C++20 with Qt Widgets. Game assets and disc images are not included.
 
 This is still a beta. Rendering and performance vary between levels, background music is experimental, and the full campaign has not been verified on every PSP model. Bug reports should include the level, PSP model, firmware and settings used.
 
@@ -74,7 +74,7 @@ woody/
     presentation_psp.cpp  Startup and loading screens
     extras_psp.cpp     PSP replacements for unsupported desktop features
     native/GL/         Internal drawing constants and declarations
-    vendor/src/        Adapted WoodyRE gameplay and resource loaders
+    vendor/src/        Gameplay and resource loaders
     Makefile           C++17 PSPSDK build
 ```
 
@@ -125,6 +125,6 @@ If you report a problem, include the build revision from `woodypsp-errors.log`, 
 
 ## Credits and licence
 
-Port and Studio by [Wendersondiazx](https://github.com/wendersondiazx). The engine is adapted from [WoodyRE](https://github.com/jjmhalew/WoodyRE) under GPL-3.0-or-later. See [LICENSE](LICENSE), [NOTICE](NOTICE) and the preserved upstream licence in `woody/runtime/vendor/LICENSE`.
+Port and Studio by [Wendersondiazx](https://github.com/wendersondiazx). Distributed under GPL-3.0-or-later. See [LICENSE](LICENSE), [NOTICE](NOTICE) and the preserved upstream licence in `woody/runtime/vendor/LICENSE`.
 
 Qt remains dynamically linked and is distributed under its applicable open-source terms. No commercial game assets, ROMs or disc images are included in this repository. This is an independent fan project, unaffiliated with the original game's publishers, rights holders or Sony.
